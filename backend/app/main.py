@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 
 from app.database import create_db_and_tables, engine
-from app.routers import products, shops
+from app.routers import cart, products, shops
 from app.seed import seed_if_empty
 
 
@@ -32,6 +32,7 @@ app.add_middleware(
 # ไม่งั้น path /api/... จะโดน static files ดักจับก่อนแล้วตอบ 404
 app.include_router(products.router, prefix="/api")
 app.include_router(shops.router, prefix="/api")
+app.include_router(cart.router, prefix="/api")
 
 # serve ไฟล์ frontend (index.html, pages/, css/, js/) เป็นเว็บหน้าบ้าน
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

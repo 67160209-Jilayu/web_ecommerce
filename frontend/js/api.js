@@ -1,9 +1,22 @@
 /**
- * ฟังก์ชันเรียก FastAPI backend และจัดการตะกร้าสินค้า (เก็บใน localStorage ชั่วคราว
- * สัปดาห์ 3 จะย้ายไปผูกกับ backend จริงเมื่อมีระบบผู้ใช้)
+ * ฟังก์ชันเรียก FastAPI backend
+ * สัปดาห์ 3: ตะกร้าสินค้าย้ายจาก localStorage มาเป็น DB จริงแล้ว
+ * ฝั่ง browser เก็บแค่ "cart token" (ตัวระบุตะกร้า) ไว้ผูกกับ backend เท่านั้น
+ * ยังไม่มีระบบล็อกอิน ตะกร้าจึงผูกกับเครื่อง/เบราว์เซอร์ ไม่ใช่ผูกกับผู้ใช้ (รอสัปดาห์ 4)
  */
 const API_BASE = "/api";
-const CART_KEY = "shopmarket_cart";
+const CART_TOKEN_KEY = "shopmarket_cart_token";
+
+function getCartToken() {
+  let token = localStorage.getItem(CART_TOKEN_KEY);
+  if (!token) {
+    token = crypto.randomUUID
+      ? crypto.randomUUID().replace(/-/g, "")
+      : `cart${Date.now()}${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(CART_TOKEN_KEY, token);
+  }
+  return token;
+}
 
 async function fetchProducts(search = "") {
   const url = search
@@ -21,69 +34,64 @@ async function fetchProduct(id) {
   return res.json();
 }
 
-function getCart() {
-  try {
-    return JSON.parse(localStorage.getItem(CART_KEY)) || [];
-  } catch {
-    return [];
+async function fetchCart() {
+  const res = await fetch(`${API_BASE}/cart/${getCartToken()}`);
+  if (!res.ok) throw new Error("โหลดตะกร้าไม่สำเร็จ");
+  return res.json();
+}
+
+async function addToCart(productId, qty) {
+  const res = await fetch(`${API_BASE}/cart/${getCartToken()}/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ product_id: productId, quantity: qty }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "เพิ่มสินค้าลงตะกร้าไม่สำเร็จ");
   }
+  return res.json();
 }
 
-function saveCart(cart) {
-  localStorage.setItem(CART_KEY, JSON.stringify(cart));
-}
-
-function addToCart(product, qty) {
-  const cart = getCart();
-  const existing = cart.find((item) => item.id === product.id);
-  if (existing) {
-    existing.qty = Math.min(existing.qty + qty, product.stock);
-  } else {
-    cart.push({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      image: product.image,
-      stock: product.stock,
-      qty: Math.min(qty, product.stock),
-    });
+async function updateCartItemQty(productId, qty) {
+  const res = await fetch(`${API_BASE}/cart/${getCartToken()}/items/${productId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quantity: qty }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "ปรับจำนวนไม่สำเร็จ");
   }
-  saveCart(cart);
-  return cart;
+  return res.json();
 }
 
-function updateCartQty(id, qty) {
-  const cart = getCart();
-  const item = cart.find((i) => i.id === id);
-  if (item) {
-    item.qty = Math.max(1, Math.min(qty, item.stock));
+async function removeCartItem(productId) {
+  const res = await fetch(`${API_BASE}/cart/${getCartToken()}/items/${productId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "ลบสินค้าไม่สำเร็จ");
   }
-  saveCart(cart);
-  return cart;
-}
-
-function removeFromCart(id) {
-  const cart = getCart().filter((i) => i.id !== id);
-  saveCart(cart);
-  return cart;
-}
-
-function cartItemCount() {
-  return getCart().reduce((sum, item) => sum + item.qty, 0);
-}
-
-function cartTotal() {
-  return getCart().reduce((sum, item) => sum + item.qty * item.price, 0);
+  return res.json();
 }
 
 function formatBaht(amount) {
   return "฿" + amount.toLocaleString("th-TH");
 }
 
-/** อัปเดตตัวเลขบนไอคอนตะกร้าที่ header ทุกหน้า */
-function renderCartBadge() {
+/** อัปเดตตัวเลขบนไอคอนตะกร้าที่ header ทุกหน้า (อ่านจาก backend จริง) */
+async function renderCartBadge() {
   const badge = document.getElementById("cart-badge");
-  if (badge) badge.textContent = cartItemCount();
+  if (!badge) return;
+  try {
+    const cart = await fetchCart();
+    const count = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+    badge.textContent = count;
+  } catch {
+    badge.textContent = "0";
+  }
 }
 
 document.addEventListener("DOMContentLoaded", renderCartBadge);

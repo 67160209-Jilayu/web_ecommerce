@@ -45,3 +45,27 @@ class ProductRead(SQLModel):
     free_shipping: bool
     category: str
     description: str
+
+
+class CartItemCreate(SQLModel):
+    product_id: int
+    quantity: int = 1
+
+
+class CartItemUpdate(SQLModel):
+    quantity: int
+
+
+class CartItemRead(SQLModel):
+    product_id: int
+    name: str
+    price: int
+    image: str
+    stock: int
+    quantity: int
+
+
+class CartRead(SQLModel):
+    token: str
+    items: list[CartItemRead]
+    total: int

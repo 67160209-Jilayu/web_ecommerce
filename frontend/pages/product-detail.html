@@ -112,11 +112,22 @@
         document.getElementById("qty-plus").addEventListener("click", () => {
           qtyInput.value = Math.min(product.stock, parseInt(qtyInput.value || "1", 10) + 1);
         });
-        document.getElementById("add-to-cart-btn").addEventListener("click", () => {
+        document.getElementById("add-to-cart-btn").addEventListener("click", async () => {
           const qty = Math.max(1, Math.min(product.stock, parseInt(qtyInput.value || "1", 10)));
-          addToCart(product, qty);
-          renderCartBadge();
-          document.getElementById("add-to-cart-msg").textContent = "เพิ่มลงตะกร้าแล้ว ✓";
+          const btn = document.getElementById("add-to-cart-btn");
+          const msg = document.getElementById("add-to-cart-msg");
+          btn.disabled = true;
+          try {
+            await addToCart(product.id, qty);
+            await renderCartBadge();
+            msg.style.color = "#2e7d32";
+            msg.textContent = "เพิ่มลงตะกร้าแล้ว ✓";
+          } catch (err) {
+            msg.style.color = "#e02424";
+            msg.textContent = "เกิดข้อผิดพลาด: " + err.message;
+          } finally {
+            btn.disabled = false;
+          }
         });
       }
     }

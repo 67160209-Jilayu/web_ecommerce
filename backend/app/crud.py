@@ -62,3 +62,105 @@ def create_shop(session: Session, data: schemas.ShopCreate) -> models.Shop:
     session.commit()
     session.refresh(shop)
     return shop
+
+
+# ---------- Cart (สัปดาห์ 3) ----------
+
+
+def _to_cart_read(cart: models.Cart) -> schemas.CartRead:
+    items = []
+    total = 0
+    for item in cart.items:
+        if item.product is None:  # กันกรณีสินค้าถูกลบไปแล้วแต่ยังค้างในตะกร้า
+            continue
+        subtotal = item.product.price * item.quantity
+        total += subtotal
+        items.append(
+            schemas.CartItemRead(
+                product_id=item.product_id,
+                name=item.product.name,
+                price=item.product.price,
+                image=item.product.image,
+                stock=item.product.stock,
+                quantity=item.quantity,
+            )
+        )
+    return schemas.CartRead(token=cart.token, items=items, total=total)
+
+
+def get_cart(session: Session, token: str) -> schemas.CartRead:
+    """ถ้ายังไม่เคยมีตะกร้านี้ใน DB (ยังไม่เคยเพิ่มสินค้าเลย) คืนตะกร้าว่างแทนการ error"""
+    cart = session.exec(select(models.Cart).where(models.Cart.token == token)).first()
+    if cart is None:
+        return schemas.CartRead(token=token, items=[], total=0)
+    return _to_cart_read(cart)
+
+
+def _get_or_create_cart(session: Session, token: str) -> models.Cart:
+    cart = session.exec(select(models.Cart).where(models.Cart.token == token)).first()
+    if cart:
+        return cart
+    cart = models.Cart(token=token)
+    session.add(cart)
+    session.commit()
+    session.refresh(cart)
+    return cart
+
+
+def add_cart_item(
+    session: Session, token: str, data: schemas.CartItemCreate
+) -> schemas.CartRead:
+    product = session.get(models.Product, data.product_id)
+    if product is None:
+        raise ValueError("ไม่พบสินค้านี้")
+
+    cart = _get_or_create_cart(session, token)
+    existing = session.exec(
+        select(models.CartItem).where(
+            models.CartItem.cart_id == cart.id,
+            models.CartItem.product_id == data.product_id,
+        )
+    ).first()
+
+    new_qty = min((existing.quantity if existing else 0) + data.quantity, product.stock)
+    if existing:
+        existing.quantity = new_qty
+        session.add(existing)
+    else:
+        session.add(
+            models.CartItem(cart_id=cart.id, product_id=data.product_id, quantity=new_qty)
+        )
+    session.commit()
+    session.refresh(cart)
+    return _to_cart_read(cart)
+
+
+def update_cart_item(
+    session: Session, token: str, product_id: int, quantity: int
+) -> schemas.CartRead:
+    cart = session.exec(select(models.Cart).where(models.Cart.token == token)).first()
+    if cart is None:
+        raise ValueError("ไม่พบตะกร้านี้")
+
+    item = session.exec(
+        select(models.CartItem).where(
+            models.CartItem.cart_id == cart.id,
+            models.CartItem.product_id == product_id,
+        )
+    ).first()
+    if item is None:
+        raise ValueError("ไม่พบสินค้านี้ในตะกร้า")
+
+    if quantity <= 0:
+        session.delete(item)
+    else:
+        product = session.get(models.Product, product_id)
+        item.quantity = min(quantity, product.stock)
+        session.add(item)
+    session.commit()
+    session.refresh(cart)
+    return _to_cart_read(cart)
+
+
+def remove_cart_item(session: Session, token: str, product_id: int) -> schemas.CartRead:
+    return update_cart_item(session, token, product_id, 0)

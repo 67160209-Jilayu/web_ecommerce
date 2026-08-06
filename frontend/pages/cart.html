@@ -21,7 +21,7 @@
 
   <main class="container">
     <p class="page-title">ตะกร้าสินค้าของฉัน</p>
-    <div id="cart-list"></div>
+    <div id="cart-list"><p class="state-message">กำลังโหลดตะกร้า...</p></div>
     <div id="cart-summary-wrap"></div>
   </main>
 
@@ -36,18 +36,25 @@
         : "../index.html";
     });
 
-    function renderCart() {
-      const cart = getCart();
+    async function renderCart() {
       const listEl = document.getElementById("cart-list");
       const summaryEl = document.getElementById("cart-summary-wrap");
 
-      if (cart.length === 0) {
+      let cart;
+      try {
+        cart = await fetchCart();
+      } catch (err) {
+        listEl.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${err.message}</p>`;
+        return;
+      }
+
+      if (cart.items.length === 0) {
         listEl.innerHTML = `<p class="state-message">ตะกร้าของคุณยังว่างอยู่ — <a href="../index.html" style="color:#ee4d2d;">ไปเลือกซื้อสินค้ากันเถอะ</a></p>`;
         summaryEl.innerHTML = "";
         return;
       }
 
-      listEl.innerHTML = cart
+      listEl.innerHTML = cart.items
         .map(
           (item) => `
         <div class="cart-item">
@@ -57,21 +64,22 @@
             <div class="cart-item-price">${formatBaht(item.price)}</div>
           </div>
           <div class="cart-item-qty">
-            <button type="button" onclick="changeQty(${item.id}, ${item.qty - 1})">−</button>
-            <span>${item.qty}</span>
-            <button type="button" onclick="changeQty(${item.id}, ${item.qty + 1})" ${item.qty >= item.stock ? "disabled" : ""}>+</button>
+            <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity - 1})">−</button>
+            <span>${item.quantity}</span>
+            <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity + 1})" ${item.quantity >= item.stock ? "disabled" : ""}>+</button>
           </div>
-          <div class="cart-item-price">${formatBaht(item.price * item.qty)}</div>
-          <button class="cart-item-remove" onclick="removeItem(${item.id})">ลบ</button>
+          <div class="cart-item-price">${formatBaht(item.price * item.quantity)}</div>
+          <button class="cart-item-remove" onclick="removeItem(${item.product_id})">ลบ</button>
         </div>
       `
         )
         .join("");
 
+      const itemCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
       summaryEl.innerHTML = `
         <div class="cart-summary">
-          <div>รวมทั้งหมด (${cartItemCount()} ชิ้น)</div>
-          <div class="cart-total">${formatBaht(cartTotal())}</div>
+          <div>รวมทั้งหมด (${itemCount} ชิ้น)</div>
+          <div class="cart-total">${formatBaht(cart.total)}</div>
         </div>
         <div style="text-align:right; margin-top:14px;">
           <button class="btn btn-primary" onclick="goCheckout()">ดำเนินการชำระเงิน</button>
@@ -79,25 +87,27 @@
       `;
     }
 
-    function changeQty(id, newQty) {
-      if (newQty < 1) {
-        removeItem(id);
-        return;
+    async function changeQty(productId, newQty) {
+      try {
+        if (newQty < 1) {
+          await removeCartItem(productId);
+        } else {
+          await updateCartItemQty(productId, newQty);
+        }
+        await renderCartBadge();
+        await renderCart();
+      } catch (err) {
+        alert("เกิดข้อผิดพลาด: " + err.message);
       }
-      updateCartQty(id, newQty);
-      renderCartBadge();
-      renderCart();
     }
 
-    function removeItem(id) {
-      removeFromCart(id);
-      renderCartBadge();
-      renderCart();
+    async function removeItem(productId) {
+      await changeQty(productId, 0);
     }
 
     function goCheckout() {
-      // ระบบชำระเงินจะเชื่อมต่อจริงในสัปดาห์ถัดไป (backend + ฐานข้อมูล)
-      alert("ระบบชำระเงินจะเปิดให้ใช้งานในสัปดาห์ถัดไป เมื่อเชื่อมต่อฐานข้อมูลจริงแล้ว");
+      // ระบบชำระเงินจะเชื่อมต่อจริงในสัปดาห์ถัดไป (ต้องมีระบบล็อกอินก่อน)
+      alert("ระบบชำระเงินจะเปิดให้ใช้งานในสัปดาห์ถัดไป เมื่อมีระบบล็อกอินแล้ว");
     }
 
     renderCart();
