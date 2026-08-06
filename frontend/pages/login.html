@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>เข้าสู่ระบบ - ShopMarket</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <div style="flex:1;"></div>
+    <span id="auth-status" data-login-href="login.html"></span>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <div class="auth-wrap">
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" id="tab-login" onclick="switchTab('login')">เข้าสู่ระบบ</button>
+        <button type="button" class="auth-tab" id="tab-register" onclick="switchTab('register')">สมัครสมาชิก</button>
+      </div>
+
+      <form id="login-form">
+        <p class="auth-error" id="login-error" style="display:none;"></p>
+        <div class="form-group">
+          <label>อีเมล</label>
+          <input type="email" id="login-email" required />
+        </div>
+        <div class="form-group">
+          <label>รหัสผ่าน</label>
+          <input type="password" id="login-password" required />
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;">เข้าสู่ระบบ</button>
+      </form>
+
+      <form id="register-form" style="display:none;">
+        <p class="auth-error" id="register-error" style="display:none;"></p>
+        <div class="form-group">
+          <label>ชื่อ</label>
+          <input type="text" id="register-name" required />
+        </div>
+        <div class="form-group">
+          <label>อีเมล</label>
+          <input type="email" id="register-email" required />
+        </div>
+        <div class="form-group">
+          <label>รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label>
+          <input type="password" id="register-password" required minlength="6" />
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;">สมัครสมาชิก</button>
+      </form>
+    </div>
+  </main>
+
+  <script src="../js/api.js"></script>
+  <script>
+    function switchTab(tab) {
+      document.getElementById("login-form").style.display = tab === "login" ? "block" : "none";
+      document.getElementById("register-form").style.display = tab === "register" ? "block" : "none";
+      document.getElementById("tab-login").classList.toggle("active", tab === "login");
+      document.getElementById("tab-register").classList.toggle("active", tab === "register");
+    }
+
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("login-error");
+      errorEl.style.display = "none";
+      const email = document.getElementById("login-email").value.trim();
+      const password = document.getElementById("login-password").value;
+      try {
+        await login(email, password);
+        window.location.href = "../index.html";
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = "block";
+      }
+    });
+
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("register-error");
+      errorEl.style.display = "none";
+      const name = document.getElementById("register-name").value.trim();
+      const email = document.getElementById("register-email").value.trim();
+      const password = document.getElementById("register-password").value;
+      try {
+        await registerAccount(email, password, name);
+        await login(email, password);
+        window.location.href = "../index.html";
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = "block";
+      }
+    });
+  </script>
+</body>
+</html>

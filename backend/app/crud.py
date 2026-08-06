@@ -4,6 +4,7 @@ from typing import List, Optional
 from sqlmodel import Session, select
 
 from app import models, schemas
+from app.auth import hash_password, verify_password
 
 
 def _to_product_read(product: models.Product) -> schemas.ProductRead:
@@ -110,7 +111,12 @@ def _get_or_create_cart(session: Session, token: str) -> models.Cart:
 def add_cart_item(
     session: Session, token: str, data: schemas.CartItemCreate
 ) -> schemas.CartRead:
-    product = session.get(models.Product, data.product_id)
+    # Edge Case (จากเอกสาร User Journey): "สินค้าหมดสต็อกระหว่างที่ลูกค้ากำลังเช็คเอาท์"
+    # ล็อก row สินค้าไว้ระหว่าง transaction (SELECT ... FOR UPDATE) กันสองคำขอพร้อมกัน
+    # อ่าน stock ค่าเดิมแล้วเผลอเพิ่มลงตะกร้าเกินจำนวนที่มีจริง (race condition)
+    product = session.exec(
+        select(models.Product).where(models.Product.id == data.product_id).with_for_update()
+    ).first()
     if product is None:
         raise ValueError("ไม่พบสินค้านี้")
 
@@ -164,3 +170,29 @@ def update_cart_item(
 
 def remove_cart_item(session: Session, token: str, product_id: int) -> schemas.CartRead:
     return update_cart_item(session, token, product_id, 0)
+
+
+# ---------- Auth (สัปดาห์ 4) ----------
+
+
+def create_user(session: Session, data: schemas.UserCreate) -> models.User:
+    existing = session.exec(select(models.User).where(models.User.email == data.email)).first()
+    if existing is not None:
+        raise ValueError("อีเมลนี้ถูกใช้สมัครไปแล้ว")
+
+    user = models.User(
+        email=data.email,
+        name=data.name,
+        hashed_password=hash_password(data.password),
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def authenticate_user(session: Session, email: str, password: str) -> Optional[models.User]:
+    user = session.exec(select(models.User).where(models.User.email == email)).first()
+    if user is None or not verify_password(password, user.hashed_password):
+        return None
+    return user

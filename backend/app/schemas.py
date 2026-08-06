@@ -69,3 +69,20 @@ class CartRead(SQLModel):
     token: str
     items: list[CartItemRead]
     total: int
+
+
+class UserCreate(SQLModel):
+    email: str
+    password: str
+    name: str
+
+
+class UserRead(SQLModel):
+    id: int
+    email: str
+    name: str
+
+
+class Token(SQLModel):
+    access_token: str
+    token_type: str = "bearer"

@@ -4,8 +4,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
-from app import crud, schemas
+from app import crud, models, schemas
 from app.database import get_session
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -29,8 +30,12 @@ def get_product(product_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("", response_model=schemas.ProductRead, status_code=201)
-def create_product(data: schemas.ProductCreate, session: Session = Depends(get_session)):
-    """เพิ่มสินค้าใหม่เข้าฐานข้อมูล (ยังไม่มีระบบสิทธิ์ผู้ใช้ รอสัปดาห์ 4)"""
+def create_product(
+    data: schemas.ProductCreate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(get_current_user),
+):
+    """เพิ่มสินค้าใหม่เข้าฐานข้อมูล — ต้องล็อกอินก่อน (สัปดาห์ 4)"""
     try:
         return crud.create_product(session, data)
     except ValueError as err:

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 
 from app.database import create_db_and_tables, engine
-from app.routers import cart, products, shops
+from app.routers import auth, cart, products, shops
 from app.seed import seed_if_empty
 
 
@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="ShopMarket API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="ShopMarket API", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,6 +30,7 @@ app.add_middleware(
 
 # ต้อง include API router ก่อน mount static เสมอ
 # ไม่งั้น path /api/... จะโดน static files ดักจับก่อนแล้วตอบ 404
+app.include_router(auth.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(shops.router, prefix="/api")
 app.include_router(cart.router, prefix="/api")

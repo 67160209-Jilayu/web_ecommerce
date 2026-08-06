@@ -69,6 +69,27 @@ a {
   font-size: 0.9rem;
 }
 
+#auth-status {
+  color: #fff;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.auth-link {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.auth-link-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+}
+
 .cart-link {
   position: relative;
   font-size: 1.4rem;
@@ -406,4 +427,63 @@ a {
   font-size: 1.3rem;
   font-weight: 700;
   color: var(--brand);
+}
+
+/* ---------- Auth page ---------- */
+.auth-wrap {
+  max-width: 400px;
+  margin: 40px auto;
+  background: var(--card-bg);
+  border-radius: 6px;
+  padding: 28px;
+  border: 1px solid var(--border);
+}
+
+.auth-tabs {
+  display: flex;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px;
+  cursor: pointer;
+  color: var(--text-muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-size: 0.95rem;
+}
+
+.auth-tab.active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+  font-weight: 600;
+}
+
+.form-group {
+  margin-bottom: 14px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+.auth-error {
+  color: #e02424;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
 }

@@ -1,11 +1,12 @@
 /**
  * ฟังก์ชันเรียก FastAPI backend
  * สัปดาห์ 3: ตะกร้าสินค้าย้ายจาก localStorage มาเป็น DB จริงแล้ว
- * ฝั่ง browser เก็บแค่ "cart token" (ตัวระบุตะกร้า) ไว้ผูกกับ backend เท่านั้น
- * ยังไม่มีระบบล็อกอิน ตะกร้าจึงผูกกับเครื่อง/เบราว์เซอร์ ไม่ใช่ผูกกับผู้ใช้ (รอสัปดาห์ 4)
+ * สัปดาห์ 4: เพิ่มระบบสมัคร/ล็อกอิน (JWT) — ตะกร้ายังผูกกับ browser ผ่าน token เหมือนเดิม
+ * (คนที่ยังไม่ล็อกอินยังสั่งซื้อแบบ guest ได้ ล็อกอินไว้สำหรับ endpoint ที่ต้องยืนยันตัวตน เช่น เพิ่มสินค้า/ร้านค้า)
  */
 const API_BASE = "/api";
 const CART_TOKEN_KEY = "shopmarket_cart_token";
+const AUTH_TOKEN_KEY = "shopmarket_auth_token";
 
 function getCartToken() {
   let token = localStorage.getItem(CART_TOKEN_KEY);
@@ -94,4 +95,88 @@ async function renderCartBadge() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", renderCartBadge);
+// ---------- Auth (สัปดาห์ 4) ----------
+
+function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function setAuthToken(token) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+async function registerAccount(email, password, name) {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, name }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "สมัครสมาชิกไม่สำเร็จ");
+  }
+  return res.json();
+}
+
+async function login(email, password) {
+  // ใช้ field ชื่อ username ตามมาตรฐาน OAuth2PasswordRequestForm ของ FastAPI (ส่งเป็นอีเมลจริงๆ)
+  const body = new URLSearchParams();
+  body.set("username", email);
+  body.set("password", password);
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "เข้าสู่ระบบไม่สำเร็จ");
+  }
+  const data = await res.json();
+  setAuthToken(data.access_token);
+  return data;
+}
+
+function logoutAccount() {
+  clearAuthToken();
+}
+
+async function fetchMe() {
+  const token = getAuthToken();
+  if (!token) return null;
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    clearAuthToken(); // token หมดอายุ/ไม่ถูกต้อง เคลียร์ทิ้งกันค้าง
+    return null;
+  }
+  return res.json();
+}
+
+/** แสดงสถานะล็อกอินที่ header ทุกหน้า (ต้องมี <span id="auth-status" data-login-href="..."> ในหน้า) */
+async function renderAuthStatus() {
+  const el = document.getElementById("auth-status");
+  if (!el) return;
+  const loginHref = el.dataset.loginHref || "login.html";
+  const user = await fetchMe();
+  if (user) {
+    el.innerHTML = `สวัสดี, ${user.name} · <button type="button" class="auth-link-btn" onclick="handleLogoutClick()">ออกจากระบบ</button>`;
+  } else {
+    el.innerHTML = `<a href="${loginHref}" class="auth-link">เข้าสู่ระบบ</a>`;
+  }
+}
+
+function handleLogoutClick() {
+  logoutAccount();
+  renderAuthStatus();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderCartBadge();
+  renderAuthStatus();
+});
