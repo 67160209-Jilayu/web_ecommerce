@@ -36,10 +36,6 @@ docs/user-journey.md                User Journey ที่ใช้อ้าง�
 docs/api-spec.md                    รายการ API endpoint
 ```
 
-## หน้าจอสัปดาห์นี้ (ดูเพิ่มที่ [docs/user-journey.md](docs/user-journey.md))
-1. หน้าค้นหา/รายการสินค้า (`index.html`) — ค้นหาด้วยคำ, badge ส่งฟรี/สินค้าหมด
-2. หน้ารายละเอียดสินค้า (`pages/product-detail.html`) — เลือกจำนวน, เพิ่มตะกร้า, เตือนสต็อกใกล้หมด
-3. หน้าตะกร้าสินค้า (`pages/cart.html`) — ปรับจำนวน/ลบสินค้า, คำนวณยอดรวม (เก็บใน localStorage ชั่วคราว)
 
 ## Edge Cases ที่ทำแล้ว
 - สินค้าหมด → ปิดปุ่มสั่งซื้อ, badge "สินค้าหมด"
@@ -49,18 +45,16 @@ docs/api-spec.md                    รายการ API endpoint
 
 ที่เหลือ (รอสัปดาห์ 2-3) ดูใน [docs/user-journey.md](docs/user-journey.md)
 
-## Prompt ที่ใช้
+## Prompt ที่ใช้ (แยกตามสัปดาห์)
+
+### สัปดาห์ 1 — Frontend scaffold (ทำแล้ว)
 > สร้าง FastAPI backend ที่ serve static frontend ในตัวเดียว มี router `products.py` คืน mock data
 > ตาม User Journey "อีคอมเมิร์ซ — Marketplace: ค้นหาและสั่งซื้อสินค้า" พร้อมหน้า HTML 3 หน้า
 > (ค้นหา/รายการสินค้า, รายละเอียดสินค้า, ตะกร้าสินค้า) เรียก API ด้วย `fetch()` และรองรับ
 > Edge Case: สินค้าหมด, สต็อกใกล้หมด, ค้นหาไม่พบ
 
-## Roadmap
-- **สัปดาห์ 2**: ER diagram, SQLModel, ต่อ endpoint กับ PostgreSQL จริง
-- **สัปดาห์ 3**: ย้ายตะกร้าจาก localStorage ไปผูกกับ backend + ผู้ใช้จริง
-- **สัปดาห์ 4**: ระบบล็อกอิน/สิทธิ์ผู้ใช้ + Edge Case เพิ่ม
-- **สัปดาห์ 5**: Deploy เต็มระบบ (Render/Railway) + usability test
-- **สัปดาห์ 6**: ปรับจาก feedback + นำเสนอ
+
+
 
 ## Deploy URL
 _ยังไม่ deploy — จะใส่ลิงก์ตรงนี้หลังต่อ hosting_
