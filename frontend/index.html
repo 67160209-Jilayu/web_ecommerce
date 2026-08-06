@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopMarket - ค้นหาและสั่งซื้อสินค้า</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="index.html" class="logo">🛒 ShopMarket</a>
+    <form class="search-bar" id="search-form">
+      <input
+        type="text"
+        id="search-input"
+        placeholder="ค้นหาสินค้า เช่น น้ำยาล้างจาน, กระทะ..."
+        autocomplete="off"
+      />
+      <button type="submit">ค้นหา</button>
+    </form>
+    <a href="pages/cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <p class="page-title" id="page-title">สินค้าแนะนำสำหรับคุณ</p>
+    <div class="product-grid" id="product-grid">
+      <p class="state-message">กำลังโหลดสินค้า...</p>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    const grid = document.getElementById("product-grid");
+    const pageTitle = document.getElementById("page-title");
+    const searchInput = document.getElementById("search-input");
+    const searchForm = document.getElementById("search-form");
+
+    function getSearchFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("search") || "";
+    }
+
+    function renderProducts(products) {
+      if (products.length === 0) {
+        grid.innerHTML = `<p class="state-message">ไม่พบสินค้าที่ค้นหา ลองคำอื่นดูนะ</p>`;
+        return;
+      }
+      grid.innerHTML = products
+        .map((p) => {
+          const outOfStock = p.stock === 0;
+          return `
+          <div class="product-card" onclick="location.href='pages/product-detail.html?id=${p.id}'">
+            <div class="product-thumb-wrap">
+              <div class="product-thumb">${p.image}</div>
+              ${outOfStock ? `<div class="badge-out-of-stock">สินค้าหมด</div>` : ""}
+            </div>
+            <div class="product-info">
+              ${p.free_shipping ? `<span class="badge-free-shipping">ส่งฟรี</span>` : ""}
+              <div class="product-name">${p.name}</div>
+              <div class="product-price">
+                ${formatBaht(p.price)}
+                ${p.original_price ? `<span class="original">${formatBaht(p.original_price)}</span>` : ""}
+              </div>
+              <div class="product-meta">
+                <span>⭐ ${p.rating}</span>
+                <span>ขายแล้ว ${p.sold.toLocaleString("th-TH")}</span>
+              </div>
+            </div>
+          </div>
+        `;
+        })
+        .join("");
+    }
+
+    async function loadProducts() {
+      const search = getSearchFromUrl();
+      searchInput.value = search;
+      pageTitle.textContent = search
+        ? `ผลการค้นหา "${search}"`
+        : "สินค้าแนะนำสำหรับคุณ";
+      try {
+        const products = await fetchProducts(search);
+        renderProducts(products);
+      } catch (err) {
+        grid.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${err.message}</p>`;
+      }
+    }
+
+    searchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = searchInput.value.trim();
+      window.location.href = q
+        ? `index.html?search=${encodeURIComponent(q)}`
+        : "index.html";
+    });
+
+    loadProducts();
+  </script>
+</body>
+</html>

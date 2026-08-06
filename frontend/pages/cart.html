@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ตะกร้าสินค้า - ShopMarket</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <form class="search-bar" id="search-form">
+      <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
+      <button type="submit">ค้นหา</button>
+    </form>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <p class="page-title">ตะกร้าสินค้าของฉัน</p>
+    <div id="cart-list"></div>
+    <div id="cart-summary-wrap"></div>
+  </main>
+
+  <script src="../js/api.js"></script>
+  <script>
+    const searchForm = document.getElementById("search-form");
+    searchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = document.getElementById("search-input").value.trim();
+      window.location.href = q
+        ? `../index.html?search=${encodeURIComponent(q)}`
+        : "../index.html";
+    });
+
+    function renderCart() {
+      const cart = getCart();
+      const listEl = document.getElementById("cart-list");
+      const summaryEl = document.getElementById("cart-summary-wrap");
+
+      if (cart.length === 0) {
+        listEl.innerHTML = `<p class="state-message">ตะกร้าของคุณยังว่างอยู่ — <a href="../index.html" style="color:#ee4d2d;">ไปเลือกซื้อสินค้ากันเถอะ</a></p>`;
+        summaryEl.innerHTML = "";
+        return;
+      }
+
+      listEl.innerHTML = cart
+        .map(
+          (item) => `
+        <div class="cart-item">
+          <div class="cart-item-thumb">${item.image}</div>
+          <div class="cart-item-info">
+            <div class="cart-item-name">${item.name}</div>
+            <div class="cart-item-price">${formatBaht(item.price)}</div>
+          </div>
+          <div class="cart-item-qty">
+            <button type="button" onclick="changeQty(${item.id}, ${item.qty - 1})">−</button>
+            <span>${item.qty}</span>
+            <button type="button" onclick="changeQty(${item.id}, ${item.qty + 1})" ${item.qty >= item.stock ? "disabled" : ""}>+</button>
+          </div>
+          <div class="cart-item-price">${formatBaht(item.price * item.qty)}</div>
+          <button class="cart-item-remove" onclick="removeItem(${item.id})">ลบ</button>
+        </div>
+      `
+        )
+        .join("");
+
+      summaryEl.innerHTML = `
+        <div class="cart-summary">
+          <div>รวมทั้งหมด (${cartItemCount()} ชิ้น)</div>
+          <div class="cart-total">${formatBaht(cartTotal())}</div>
+        </div>
+        <div style="text-align:right; margin-top:14px;">
+          <button class="btn btn-primary" onclick="goCheckout()">ดำเนินการชำระเงิน</button>
+        </div>
+      `;
+    }
+
+    function changeQty(id, newQty) {
+      if (newQty < 1) {
+        removeItem(id);
+        return;
+      }
+      updateCartQty(id, newQty);
+      renderCartBadge();
+      renderCart();
+    }
+
+    function removeItem(id) {
+      removeFromCart(id);
+      renderCartBadge();
+      renderCart();
+    }
+
+    function goCheckout() {
+      // ระบบชำระเงินจะเชื่อมต่อจริงในสัปดาห์ถัดไป (backend + ฐานข้อมูล)
+      alert("ระบบชำระเงินจะเปิดให้ใช้งานในสัปดาห์ถัดไป เมื่อเชื่อมต่อฐานข้อมูลจริงแล้ว");
+    }
+
+    renderCart();
+  </script>
+</body>
+</html>

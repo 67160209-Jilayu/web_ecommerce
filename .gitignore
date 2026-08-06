@@ -1,0 +1,20 @@
+# ตัวแปรลับ - ห้าม commit เด็ดขาด
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Docker
+db_data/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Claude Code local session settings (เครื่องใครเครื่องมัน ไม่ commit)
+.claude/settings.local.json

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>รายละเอียดสินค้า - ShopMarket</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <form class="search-bar" id="search-form">
+      <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
+      <button type="submit">ค้นหา</button>
+    </form>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <a href="../index.html" class="back-link">← กลับไปหน้ารายการสินค้า</a>
+    <div id="detail-content">
+      <p class="state-message">กำลังโหลดข้อมูลสินค้า...</p>
+    </div>
+  </main>
+
+  <script src="../js/api.js"></script>
+  <script>
+    const searchForm = document.getElementById("search-form");
+    searchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = document.getElementById("search-input").value.trim();
+      window.location.href = q
+        ? `../index.html?search=${encodeURIComponent(q)}`
+        : "../index.html";
+    });
+
+    function getProductIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return parseInt(params.get("id"), 10);
+    }
+
+    async function loadDetail() {
+      const container = document.getElementById("detail-content");
+      const id = getProductIdFromUrl();
+
+      if (!id) {
+        container.innerHTML = `<p class="state-message">ไม่พบสินค้าที่ต้องการ (ไม่มี id ใน URL)</p>`;
+        return;
+      }
+
+      let product;
+      try {
+        product = await fetchProduct(id);
+      } catch (err) {
+        container.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${err.message}</p>`;
+        return;
+      }
+
+      if (!product) {
+        container.innerHTML = `<p class="state-message">ไม่พบสินค้านี้ อาจถูกลบหรือหมดจำหน่ายแล้ว</p>`;
+        return;
+      }
+
+      const outOfStock = product.stock === 0;
+      const lowStock = product.stock > 0 && product.stock <= 5;
+
+      container.innerHTML = `
+        <div class="detail-layout">
+          <div class="detail-thumb">${product.image}</div>
+          <div>
+            <h1 class="detail-name">${product.name}</h1>
+            <div class="detail-shop">ร้านค้า: ${product.shop_name} · ⭐ ${product.rating} · ขายแล้ว ${product.sold.toLocaleString("th-TH")} ชิ้น</div>
+            ${product.free_shipping ? `<span class="badge-free-shipping">จัดส่งฟรี</span>` : ""}
+
+            <div class="detail-price-box">
+              <div class="detail-price">
+                ${formatBaht(product.price)}
+                ${product.original_price ? `<span class="original">${formatBaht(product.original_price)}</span>` : ""}
+              </div>
+            </div>
+
+            <p class="detail-desc">${product.description}</p>
+
+            ${
+              outOfStock
+                ? `<p class="stock-warning">สินค้าหมดชั่วคราว ไม่สามารถสั่งซื้อได้ในขณะนี้</p>
+                   <button class="btn btn-secondary" disabled>สินค้าหมด</button>`
+                : `
+                  <div class="qty-selector">
+                    <button type="button" id="qty-minus">−</button>
+                    <input type="number" id="qty-input" value="1" min="1" max="${product.stock}" />
+                    <button type="button" id="qty-plus">+</button>
+                    <span style="color:#757575;font-size:0.85rem;">คงเหลือ ${product.stock} ชิ้น</span>
+                  </div>
+                  ${lowStock ? `<p class="stock-warning">เหลือสินค้าจำนวนน้อย รีบสั่งซื้อก่อนหมด</p>` : ""}
+                  <button class="btn btn-primary" id="add-to-cart-btn">เพิ่มลงตะกร้า</button>
+                  <span id="add-to-cart-msg" style="margin-left:12px;color:#2e7d32;font-size:0.9rem;"></span>
+                `
+            }
+          </div>
+        </div>
+      `;
+
+      if (!outOfStock) {
+        const qtyInput = document.getElementById("qty-input");
+        document.getElementById("qty-minus").addEventListener("click", () => {
+          qtyInput.value = Math.max(1, parseInt(qtyInput.value || "1", 10) - 1);
+        });
+        document.getElementById("qty-plus").addEventListener("click", () => {
+          qtyInput.value = Math.min(product.stock, parseInt(qtyInput.value || "1", 10) + 1);
+        });
+        document.getElementById("add-to-cart-btn").addEventListener("click", () => {
+          const qty = Math.max(1, Math.min(product.stock, parseInt(qtyInput.value || "1", 10)));
+          addToCart(product, qty);
+          renderCartBadge();
+          document.getElementById("add-to-cart-msg").textContent = "เพิ่มลงตะกร้าแล้ว ✓";
+        });
+      }
+    }
+
+    loadDetail();
+  </script>
+</body>
+</html>
