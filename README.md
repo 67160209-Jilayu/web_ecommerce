@@ -2,7 +2,7 @@
 
 โปรเจกต์จาก User Journey ข้อ 2 (อีคอมเมิร์ซ) ทำตามแนวทาง "จาก User Journey สู่โค้ดจริงด้วย AI"
 
-**ตอนนี้อยู่สัปดาห์ 2** — backend ต่อ PostgreSQL จริงแล้ว (เลิกใช้ mock data), ยังไม่ deploy
+**ตอนนี้อยู่สัปดาห์ 3** — เชื่อม frontend เข้ากับ backend จริงครบวงจร ตะกร้าสินค้าย้ายจาก localStorage เป็น DB จริงแล้ว ยังไม่ deploy
 
 ## Tech Stack
 - Backend: FastAPI (Python)
@@ -29,17 +29,18 @@ docker compose up
 ```
 backend/app/main.py                 จุดเริ่มแอป: API router + เชื่อม DB + mount static files
 backend/app/database.py             เชื่อมต่อ PostgreSQL (SQLModel engine/session)
-backend/app/models.py               โครงสร้างตาราง Shop, Product
+backend/app/models.py               โครงสร้างตาราง Shop, Product, Cart, CartItem
 backend/app/schemas.py              รูปแบบข้อมูลรับ-ส่งผ่าน API
 backend/app/crud.py                 ฟังก์ชันอ่าน/เขียนฐานข้อมูล
 backend/app/seed.py                 ใส่ข้อมูลตัวอย่างตอนเริ่มระบบครั้งแรก
 backend/app/routers/products.py     API สินค้า (GET/POST /api/products)
 backend/app/routers/shops.py        API ร้านค้า (GET/POST /api/shops)
+backend/app/routers/cart.py         API ตะกร้าสินค้า (GET/POST/PATCH/DELETE)
 frontend/index.html                 หน้าค้นหา + รายการสินค้า
-frontend/pages/product-detail.html  หน้ารายละเอียดสินค้า + เพิ่มตะกร้า
-frontend/pages/cart.html            หน้าตะกร้าสินค้า
+frontend/pages/product-detail.html  หน้ารายละเอียดสินค้า + เพิ่มตะกร้า (เรียก API จริง)
+frontend/pages/cart.html            หน้าตะกร้าสินค้า (เรียก API จริง ไม่ใช้ localStorage แล้ว)
 docs/user-journey.md                User Journey ที่ใช้อ้างอิง
-docs/er-diagram.md                  โครงสร้างตาราง + ความสัมพันธ์ (สัปดาห์ 2)
+docs/er-diagram.md                  โครงสร้างตาราง + ความสัมพันธ์
 docs/api-spec.md                    รายการ API endpoint
 ```
 
@@ -48,9 +49,10 @@ docs/api-spec.md                    รายการ API endpoint
 - สินค้าหมด → ปิดปุ่มสั่งซื้อ, badge "สินค้าหมด"
 - สต็อกเหลือน้อย (≤5) → แจ้งเตือน
 - ค้นหาไม่พบ → แสดงข้อความแทนหน้าว่าง
-- จำกัดจำนวนในตะกร้าไม่เกิน stock
+- จำกัดจำนวนในตะกร้าไม่เกิน stock (เช็คที่ backend จริงแล้ว ไม่ใช่แค่ฝั่ง frontend)
+- ตะกร้าผูกกับ browser ผ่าน token ใน localStorage (คนละเครื่อง/เบราว์เซอร์ = คนละตะกร้า จนกว่าจะมีระบบล็อกอิน)
 
-ที่เหลือ (รอสัปดาห์ 2-3) ดูใน [docs/user-journey.md](docs/user-journey.md)
+ที่เหลือ (รอสัปดาห์ 4-5) ดูใน [docs/user-journey.md](docs/user-journey.md)
 
 ## Prompt ที่ใช้ (แยกตามสัปดาห์)
 
@@ -68,8 +70,13 @@ docs/api-spec.md                    รายการ API endpoint
 > router `shops.py` (`GET`/`POST /api/shops`) โดยคง response shape เดิมไว้ (field `shop_name`
 > แบบ flatten) เพื่อไม่ต้องแก้ frontend ที่เขียนไว้ตั้งแต่สัปดาห์ 1
 
-
-
+### สัปดาห์ 3 — เชื่อม frontend กับ backend จริง (ทำแล้ว)
+> ย้ายตะกร้าสินค้าจาก localStorage ไปเป็นตาราง Cart/CartItem จริงใน PostgreSQL โดยที่ยังไม่มี
+> ระบบล็อกอิน ให้ frontend สร้าง token (UUID) เก็บใน localStorage เองแล้วส่งไปผูกกับตะกร้าใน DB
+> แทน user_id ชั่วคราว เพิ่ม router `cart.py` ครบ CRUD (`GET/POST /api/cart/{token}`,
+> `PATCH`/`DELETE /api/cart/{token}/items/{product_id}`) แล้วแก้ `js/api.js`,
+> `product-detail.html`, `cart.html` ให้เรียก API จริงแทนฟังก์ชัน localStorage เดิมทั้งหมด
+> โดยคง UI/UX เดิมไว้ไม่เปลี่ยน
 
 ## Deploy URL
 _ยังไม่ deploy — จะใส่ลิงก์ตรงนี้หลังต่อ hosting_
