@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ตะกร้าสินค้า - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="../css/style.css" />
 </head>
 <body>
@@ -13,7 +19,7 @@
       <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
-    <span id="auth-status" data-login-href="login.html"></span>
+    <span id="auth-status" data-base="../"></span>
     <a href="cart.html" class="cart-link">
       🛍️
       <span class="cart-badge" id="cart-badge">0</span>
@@ -28,13 +34,10 @@
 
   <script src="../js/api.js"></script>
   <script>
-    const searchForm = document.getElementById("search-form");
-    searchForm.addEventListener("submit", (e) => {
+    document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const q = document.getElementById("search-input").value.trim();
-      window.location.href = q
-        ? `../index.html?search=${encodeURIComponent(q)}`
-        : "../index.html";
+      window.location.href = q ? `../index.html?search=${encodeURIComponent(q)}` : "../index.html";
     });
 
     async function renderCart() {
@@ -45,60 +48,80 @@
       try {
         cart = await fetchCart();
       } catch (err) {
-        listEl.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${err.message}</p>`;
+        listEl.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
         return;
       }
 
       if (cart.items.length === 0) {
-        listEl.innerHTML = `<p class="state-message">ตะกร้าของคุณยังว่างอยู่ — <a href="../index.html" style="color:#ee4d2d;">ไปเลือกซื้อสินค้ากันเถอะ</a></p>`;
+        listEl.innerHTML = `<p class="state-message">ตะกร้าของคุณยังว่างอยู่ —
+          <a href="../index.html" style="color: var(--chili);">ไปเลือกซื้อสินค้ากันเถอะ</a></p>`;
         summaryEl.innerHTML = "";
         return;
       }
 
-      listEl.innerHTML = cart.items
+      // จัดกลุ่มตามร้าน เพื่อให้ผู้ซื้อเห็นชัดว่าจะถูกแยกเป็นคนละคำสั่งซื้อ
+      const byShop = {};
+      cart.items.forEach((item) => {
+        const key = item.shop_id || 0;
+        (byShop[key] = byShop[key] || { name: item.shop_name || "ไม่ระบุร้าน", items: [] })
+          .items.push(item);
+      });
+
+      listEl.innerHTML = Object.values(byShop)
         .map(
-          (item) => `
-        <div class="cart-item">
-          <div class="cart-item-thumb">${item.image}</div>
-          <div class="cart-item-info">
-            <div class="cart-item-name">${item.name}</div>
-            <div class="cart-item-price">${formatBaht(item.price)}</div>
-          </div>
-          <div class="cart-item-qty">
-            <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity - 1})">−</button>
-            <span>${item.quantity}</span>
-            <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity + 1})" ${item.quantity >= item.stock ? "disabled" : ""}>+</button>
-          </div>
-          <div class="cart-item-price">${formatBaht(item.price * item.quantity)}</div>
-          <button class="cart-item-remove" onclick="removeItem(${item.product_id})">ลบ</button>
-        </div>
-      `
+          (group, gi) => `
+        <div class="shop-group">
+          <div class="shop-group-head">🏪 ${escapeHtml(group.name)}</div>
+          ${group.items
+            .map(
+              (item, i) => `
+            <div class="cart-item" style="--i:${gi + i}; margin-bottom: 8px;">
+              <div class="cart-item-thumb">${productThumb(item)}</div>
+              <div class="cart-item-info">
+                <div class="cart-item-name">${escapeHtml(item.name)}</div>
+                <div class="cart-item-price">${formatBaht(item.price)}</div>
+              </div>
+              <div class="cart-item-qty">
+                <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity - 1})">−</button>
+                <span>${item.quantity}</span>
+                <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity + 1})"
+                  ${item.quantity >= item.stock ? "disabled" : ""}>+</button>
+              </div>
+              <div class="cart-item-price">${formatBaht(item.price * item.quantity)}</div>
+              <button class="cart-item-remove" onclick="removeItem(${item.product_id})">ลบ</button>
+            </div>`
+            )
+            .join("")}
+        </div>`
         )
         .join("");
 
       const itemCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
+      const shopCount = Object.keys(byShop).length;
       summaryEl.innerHTML = `
         <div class="cart-summary">
-          <div>รวมทั้งหมด (${itemCount} ชิ้น)</div>
+          <div>
+            รวมทั้งหมด (${itemCount} ชิ้น จาก ${shopCount} ร้าน)
+            ${shopCount > 1 ? `<div style="font-size:0.78rem; opacity:0.7; margin-top:4px;">
+              สินค้าจากต่างร้านจะถูกแยกเป็นคนละคำสั่งซื้อ</div>` : ""}
+          </div>
           <div class="cart-total">${formatBaht(cart.total)}</div>
         </div>
-        <div style="text-align:right; margin-top:14px;">
-          <button class="btn btn-primary" onclick="goCheckout()">ดำเนินการชำระเงิน</button>
+        <div style="text-align: right; margin-top: 14px;">
+          <button class="btn btn-primary" onclick="goCheckout()">ดำเนินการสั่งซื้อ</button>
         </div>
-      `;
+        <p style="text-align:right; color: var(--muted); font-size: 0.78rem; margin-top: 8px;">
+          ยังไม่รวมค่าจัดส่ง (คำนวณในหน้าถัดไป)</p>`;
     }
 
     async function changeQty(productId, newQty) {
       try {
-        if (newQty < 1) {
-          await removeCartItem(productId);
-        } else {
-          await updateCartItemQty(productId, newQty);
-        }
+        if (newQty < 1) await removeCartItem(productId);
+        else await updateCartItemQty(productId, newQty);
         await renderCartBadge();
         await renderCart();
       } catch (err) {
-        alert("เกิดข้อผิดพลาด: " + err.message);
+        showToast(err.message, "error");
       }
     }
 
@@ -107,8 +130,12 @@
     }
 
     function goCheckout() {
-      // ระบบชำระเงินจะเชื่อมต่อจริงในสัปดาห์ถัดไป (ต้องมีระบบล็อกอินก่อน)
-      alert("ระบบชำระเงินจะเปิดให้ใช้งานในสัปดาห์ถัดไป เมื่อมีระบบล็อกอินแล้ว");
+      if (!isLoggedIn()) {
+        showToast("กรุณาเข้าสู่ระบบก่อนสั่งซื้อ", "error");
+        setTimeout(() => requireLogin("../"), 900);
+        return;
+      }
+      window.location.href = "checkout.html";
     }
 
     renderCart();

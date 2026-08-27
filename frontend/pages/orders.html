@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>คำสั่งซื้อของฉัน - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <div style="flex: 1"></div>
+    <span id="auth-status" data-base="../"></span>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <p class="page-title">คำสั่งซื้อของฉัน</p>
+    <div class="tab-bar" id="status-tabs"></div>
+    <div id="orders-body"><p class="state-message">กำลังโหลด...</p></div>
+  </main>
+
+  <div id="modal-root"></div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    const TABS = [
+      { key: "ALL", label: "ทั้งหมด" },
+      { key: "PENDING_PAYMENT", label: "รอชำระเงิน" },
+      { key: "PAID", label: "รอจัดส่ง" },
+      { key: "SHIPPED", label: "กำลังส่ง" },
+      { key: "DELIVERED", label: "ได้รับแล้ว" },
+      { key: "COMPLETED", label: "สำเร็จ" },
+      { key: "CANCELLED", label: "ยกเลิก" },
+    ];
+
+    let allOrders = [];
+    let activeTab = "ALL";
+
+    function renderTabs() {
+      document.getElementById("status-tabs").innerHTML = TABS.map(
+        (t) => `<button type="button" class="tab-btn ${t.key === activeTab ? "active" : ""}"
+          onclick="switchTab('${t.key}')">${t.label}</button>`
+      ).join("");
+    }
+
+    function switchTab(key) {
+      activeTab = key;
+      renderTabs();
+      renderOrders();
+    }
+
+    async function loadOrders() {
+      if (!isLoggedIn()) {
+        requireLogin("../");
+        return;
+      }
+      renderTabs();
+      try {
+        allOrders = await fetchMyOrders();
+        renderOrders();
+      } catch (err) {
+        document.getElementById("orders-body").innerHTML =
+          `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    /** ปุ่มที่ผู้ซื้อทำได้ ขึ้นกับสถานะปัจจุบันของออเดอร์ */
+    function buyerActions(order) {
+      const buttons = [];
+      if (order.status === "PENDING_PAYMENT") {
+        buttons.push(`<button class="btn btn-primary btn-sm" onclick="doPay(${order.id})">ชำระเงิน</button>`);
+        buttons.push(`<button class="btn-ghost" onclick="doCancel(${order.id})">ยกเลิก</button>`);
+      } else if (order.status === "PAID") {
+        buttons.push(`<button class="btn-ghost" onclick="doCancel(${order.id})">ยกเลิก</button>`);
+      } else if (order.status === "SHIPPED") {
+        buttons.push(`<button class="btn btn-primary btn-sm" onclick="doReceive(${order.id})">ได้รับสินค้าแล้ว</button>`);
+      }
+      if (["DELIVERED", "COMPLETED"].includes(order.status)) {
+        const pending = order.items.filter((i) => !i.reviewed);
+        if (pending.length) {
+          buttons.push(
+            `<button class="btn btn-primary btn-sm" onclick="openReview(${order.id})">รีวิวสินค้า (${pending.length})</button>`
+          );
+        } else {
+          buttons.push(`<span class="pill-muted">รีวิวครบแล้ว ขอบคุณค่ะ</span>`);
+        }
+      }
+      return buttons.join("");
+    }
+
+    function renderOrders() {
+      const body = document.getElementById("orders-body");
+      const orders =
+        activeTab === "ALL" ? allOrders : allOrders.filter((o) => o.status === activeTab);
+
+      if (!orders.length) {
+        body.innerHTML = `<p class="state-message">ยังไม่มีคำสั่งซื้อในหมวดนี้ —
+          <a href="../index.html" style="color: var(--chili);">ไปเลือกซื้อสินค้า</a></p>`;
+        return;
+      }
+
+      body.innerHTML = orders
+        .map(
+          (o) => `
+        <div class="order-card">
+          <div class="order-head">
+            <div>
+              <div class="order-shop">🏪 ${escapeHtml(o.shop_name)}</div>
+              <div class="order-number">เลขที่ ${escapeHtml(o.order_number)} · ${formatDate(o.created_at)}</div>
+            </div>
+            <span class="status-badge status-${o.status}">${ORDER_STATUS_LABEL[o.status] || o.status}</span>
+          </div>
+
+          ${o.items
+            .map(
+              (i) => `
+            <div class="order-line">
+              <div class="order-line-thumb">${productThumb(i)}</div>
+              <div class="order-line-info">
+                <div class="order-line-name">
+                  <a href="product-detail.html?id=${i.product_id}">${escapeHtml(i.product_name)}</a>
+                </div>
+                <div class="order-line-meta">
+                  ${formatBaht(i.product_price)} × ${i.quantity}
+                  ${i.reviewed ? ' · <span style="color: var(--marigold)">รีวิวแล้ว ★</span>' : ""}
+                </div>
+              </div>
+              <div class="cart-item-price">${formatBaht(i.subtotal)}</div>
+            </div>`
+            )
+            .join("")}
+
+          <div class="order-foot">
+            <div>
+              <div class="order-line-meta">
+                ${PAYMENT_LABEL[o.payment_method] || o.payment_method}
+                · ส่งถึง ${escapeHtml(o.recipient_name)} (${escapeHtml(o.recipient_phone)})
+              </div>
+              <div class="order-line-meta">
+                สินค้า ${formatBaht(o.subtotal)} + ค่าส่ง ${o.shipping_fee === 0 ? "ฟรี" : formatBaht(o.shipping_fee)}
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div class="order-total-label">ยอดรวม</div>
+              <div class="order-total-value">${formatBaht(o.total)}</div>
+            </div>
+          </div>
+
+          <div class="order-actions" style="margin-top: 12px; justify-content: flex-end;">
+            ${buyerActions(o)}
+          </div>
+        </div>`
+        )
+        .join("");
+    }
+
+    /* ---------- actions ---------- */
+
+    async function runAction(fn, id, successMsg) {
+      try {
+        await fn(id);
+        showToast(successMsg);
+        allOrders = await fetchMyOrders();
+        renderOrders();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    }
+
+    const doPay = (id) => runAction(payOrder, id, "ชำระเงินสำเร็จ รอร้านค้าจัดส่ง");
+    const doReceive = (id) => runAction(receiveOrder, id, "ยืนยันรับสินค้าแล้ว — รีวิวได้เลย");
+
+    function doCancel(id) {
+      if (!confirm("ยืนยันยกเลิกคำสั่งซื้อนี้? ระบบจะคืนสต็อกสินค้าให้ร้านค้าอัตโนมัติ")) return;
+      runAction(cancelOrder, id, "ยกเลิกคำสั่งซื้อแล้ว");
+    }
+
+    /* ---------- รีวิว ---------- */
+
+    let reviewQueue = [];
+    let reviewRating = 5;
+
+    function openReview(orderId) {
+      const order = allOrders.find((o) => o.id === orderId);
+      reviewQueue = order.items.filter((i) => !i.reviewed);
+      showReviewModal();
+    }
+
+    function showReviewModal() {
+      const item = reviewQueue[0];
+      if (!item) {
+        closeReviewModal();
+        return;
+      }
+      reviewRating = 5;
+      document.getElementById("modal-root").innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this) closeReviewModal()">
+          <div class="modal-box">
+            <h3 class="modal-title">รีวิวสินค้า</h3>
+            <div class="order-line" style="border: none; padding-top: 0;">
+              <div class="order-line-thumb">${productThumb(item)}</div>
+              <div class="order-line-info">
+                <div class="order-line-name">${escapeHtml(item.product_name)}</div>
+                <div class="order-line-meta">${formatBaht(item.product_price)} × ${item.quantity}</div>
+              </div>
+            </div>
+            <p class="alert alert-error" id="review-error" style="display:none;"></p>
+            <div class="form-group">
+              <label>ให้คะแนน</label>
+              <div class="star-input" id="star-input">
+                ${[1, 2, 3, 4, 5].map((n) => `<span class="on" data-n="${n}">★</span>`).join("")}
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="review-comment">ความคิดเห็น (ไม่บังคับ)</label>
+              <textarea id="review-comment" rows="3" placeholder="สินค้าเป็นอย่างไรบ้าง? ตรงปกไหม?"></textarea>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button class="btn-ghost" onclick="closeReviewModal()">ปิด</button>
+              <button class="btn btn-primary btn-sm" onclick="submitReview(${item.id})">ส่งรีวิว</button>
+            </div>
+            ${reviewQueue.length > 1
+              ? `<p class="form-hint" style="text-align:center; margin-top:10px;">
+                   เหลืออีก ${reviewQueue.length - 1} รายการในคำสั่งซื้อนี้</p>`
+              : ""}
+          </div>
+        </div>`;
+
+      const stars = document.querySelectorAll("#star-input span");
+      stars.forEach((s) => {
+        s.addEventListener("click", () => {
+          reviewRating = Number(s.dataset.n);
+          stars.forEach((x) => x.classList.toggle("on", Number(x.dataset.n) <= reviewRating));
+        });
+      });
+    }
+
+    function closeReviewModal() {
+      document.getElementById("modal-root").innerHTML = "";
+    }
+
+    async function submitReview(orderItemId) {
+      const errorEl = document.getElementById("review-error");
+      errorEl.style.display = "none";
+      try {
+        await createReview({
+          order_item_id: orderItemId,
+          rating: reviewRating,
+          comment: document.getElementById("review-comment").value.trim(),
+        });
+        showToast("ขอบคุณสำหรับรีวิว ★");
+        reviewQueue.shift();
+        allOrders = await fetchMyOrders();
+        renderOrders();
+        if (reviewQueue.length) showReviewModal();
+        else closeReviewModal();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = "block";
+      }
+    }
+
+    loadOrders();
+  </script>
+</body>
+</html>

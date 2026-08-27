@@ -1,9 +1,11 @@
-"""Router สมัครสมาชิก/ล็อกอิน — สัปดาห์ 4
+"""Router สมัครสมาชิก/ล็อกอิน
 
 ใช้ OAuth2PasswordBearer/OAuth2PasswordRequestForm ตามมาตรฐานของ FastAPI เพื่อให้
 Swagger UI (`/docs`) มีปุ่ม "Authorize" ทดสอบ endpoint ที่ต้องล็อกอินได้โดยตรง
 """
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodel import Session
 
@@ -53,6 +55,23 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="ไม่พบผู้ใช้นี้")
     return user
+
+
+def get_optional_user(
+    request: Request, session: Session = Depends(get_session)
+) -> Optional[models.User]:
+    """เหมือน get_current_user แต่ไม่บังคับล็อกอิน — คืน None ถ้าไม่มี token ที่ใช้ได้
+
+    ใช้กับ endpoint ที่ guest ก็เรียกได้ (เช่น เพิ่มสินค้าลงตะกร้า) แต่ถ้าล็อกอินอยู่
+    จะได้ตรวจเพิ่มว่าไม่ใช่การซื้อสินค้าของร้านตัวเอง
+    """
+    header = request.headers.get("Authorization") or ""
+    if not header.lower().startswith("bearer "):
+        return None
+    user_id = decode_access_token(header[7:].strip())
+    if user_id is None:
+        return None
+    return session.get(models.User, user_id)
 
 
 @router.get("/me", response_model=schemas.UserRead)

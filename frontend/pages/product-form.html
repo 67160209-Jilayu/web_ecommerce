@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ลงขายสินค้า - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <div style="flex: 1"></div>
+    <span id="auth-status" data-base="../"></span>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <a href="seller.html" class="back-link">← กลับไปแดชบอร์ดร้าน</a>
+    <p class="page-title" id="form-title">ลงขายสินค้าใหม่</p>
+    <div id="form-body"><p class="state-message">กำลังโหลด...</p></div>
+  </main>
+
+  <script src="../js/api.js"></script>
+  <script>
+    let editingId = null;
+    let mediaList = []; // [{url, media_type}] — เรียงลำดับตามที่แสดง รูปแรกใช้เป็นปก
+
+    async function init() {
+      if (!isLoggedIn()) {
+        requireLogin("../");
+        return;
+      }
+
+      // ต้องมีร้านก่อนถึงลงขายได้
+      const shop = await fetchMyShop();
+      if (!shop) {
+        document.getElementById("form-body").innerHTML = `
+          <div class="panel" style="max-width: 520px;">
+            <p class="alert alert-info">คุณยังไม่มีร้านค้า — ต้องเปิดร้านก่อนถึงจะลงขายสินค้าได้</p>
+            <a href="seller.html" class="btn btn-primary">ไปเปิดร้าน</a>
+          </div>`;
+        return;
+      }
+
+      editingId = parseInt(new URLSearchParams(window.location.search).get("id"), 10) || null;
+
+      let categories = [];
+      try {
+        categories = await fetchCategories();
+      } catch {}
+
+      let product = null;
+      if (editingId) {
+        product = await fetchProduct(editingId);
+        if (!product) {
+          document.getElementById("form-body").innerHTML =
+            `<p class="state-message">ไม่พบสินค้าที่ต้องการแก้ไข</p>`;
+          return;
+        }
+        document.getElementById("form-title").textContent = "แก้ไขสินค้า";
+        mediaList = [...(product.media || [])];
+      }
+
+      renderForm(categories, product);
+    }
+
+    function renderForm(categories, p) {
+      document.getElementById("form-body").innerHTML = `
+        <div class="panel" style="max-width: 760px;">
+          <p class="alert alert-error" id="form-error" style="display:none;"></p>
+          <form id="product-form">
+            <div class="form-group">
+              <label for="p-name">ชื่อสินค้า *</label>
+              <input type="text" id="p-name" required maxlength="120"
+                value="${p ? escapeHtml(p.name) : ""}" placeholder="เช่น หม้อหุงข้าวไฟฟ้า 1.8 ลิตร" />
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="p-price">ราคาขาย (บาท) *</label>
+                <input type="number" id="p-price" required min="1" value="${p ? p.price : ""}" />
+              </div>
+              <div class="form-group">
+                <label for="p-original">ราคาเดิม (ไว้โชว์ส่วนลด)</label>
+                <input type="number" id="p-original" min="0" value="${p?.original_price ?? ""}" />
+              </div>
+              <div class="form-group">
+                <label for="p-stock">จำนวนคงเหลือ *</label>
+                <input type="number" id="p-stock" required min="0" value="${p ? p.stock : 1}" />
+              </div>
+              <div class="form-group">
+                <label for="p-category">หมวดหมู่</label>
+                <select id="p-category">
+                  <option value="">— ไม่ระบุ —</option>
+                  ${categories
+                    .map(
+                      (c) => `<option value="${c.id}" ${
+                        p && p.category_id === c.id ? "selected" : ""
+                      }>${c.icon} ${escapeHtml(c.name)}</option>`
+                    )
+                    .join("")}
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="p-desc">รายละเอียดสินค้า</label>
+              <textarea id="p-desc" rows="4"
+                placeholder="บอกรายละเอียด ขนาด วัสดุ วิธีใช้ เพื่อให้ลูกค้าตัดสินใจง่ายขึ้น">${p ? escapeHtml(p.description) : ""}</textarea>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="p-emoji">อีโมจิสำรอง (ใช้เมื่อไม่มีรูป)</label>
+                <input type="text" id="p-emoji" maxlength="4" value="${p ? escapeHtml(p.image) : "📦"}" />
+              </div>
+              <div class="form-group" style="display: flex; align-items: flex-end;">
+                <label class="checkbox-row">
+                  <input type="checkbox" id="p-free" ${p?.free_shipping ? "checked" : ""} />
+                  จัดส่งฟรีสำหรับสินค้าชิ้นนี้
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>รูปภาพ / วิดีโอสินค้า</label>
+              <div class="dropzone" id="dropzone">
+                <span class="dropzone-icon">📸</span>
+                <span class="dropzone-text">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางตรงนี้</span>
+                <div class="form-hint">รูป jpg/png/webp/gif ไม่เกิน 5MB · วิดีโอ mp4/webm/mov ไม่เกิน 50MB</div>
+                <input type="file" id="file-input" accept="image/*,video/*" multiple hidden />
+              </div>
+              <div class="media-preview" id="media-preview"></div>
+              <div class="form-hint" id="upload-status"></div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+              <button type="submit" class="btn btn-primary" id="submit-btn">
+                ${editingId ? "บันทึกการแก้ไข" : "ลงขายสินค้า"}
+              </button>
+              <a href="seller.html" class="btn-ghost" style="display: inline-flex; align-items: center;">ยกเลิก</a>
+            </div>
+          </form>
+        </div>`;
+
+      setupUpload();
+      renderMediaPreview();
+      document.getElementById("product-form").addEventListener("submit", submitForm);
+    }
+
+    /* ---------- อัปโหลดสื่อ ---------- */
+    function setupUpload() {
+      const dropzone = document.getElementById("dropzone");
+      const fileInput = document.getElementById("file-input");
+
+      dropzone.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", () => handleFiles(fileInput.files));
+
+      ["dragenter", "dragover"].forEach((evt) =>
+        dropzone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          dropzone.classList.add("dragover");
+        })
+      );
+      ["dragleave", "drop"].forEach((evt) =>
+        dropzone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          dropzone.classList.remove("dragover");
+        })
+      );
+      dropzone.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+    }
+
+    async function handleFiles(files) {
+      const status = document.getElementById("upload-status");
+      const list = Array.from(files || []);
+      if (!list.length) return;
+
+      for (let i = 0; i < list.length; i++) {
+        status.textContent = `กำลังอัปโหลด ${i + 1}/${list.length}...`;
+        try {
+          const result = await uploadMedia(list[i]);
+          mediaList.push(result);
+          renderMediaPreview();
+        } catch (err) {
+          showToast(`${list[i].name}: ${err.message}`, "error");
+        }
+      }
+      status.textContent = `อัปโหลดแล้ว ${mediaList.length} ไฟล์`;
+      document.getElementById("file-input").value = "";
+    }
+
+    function renderMediaPreview() {
+      document.getElementById("media-preview").innerHTML = mediaList
+        .map(
+          (m, i) => `
+        <div class="media-item">
+          ${
+            m.media_type === "video"
+              ? `<video src="${escapeHtml(m.url)}" muted></video>`
+              : `<img src="${escapeHtml(m.url)}" alt="" />`
+          }
+          <button type="button" class="media-remove" onclick="removeMedia(${i})" title="ลบ">✕</button>
+          <span class="media-badge">${m.media_type === "video" ? "วิดีโอ" : i === 0 ? "ปก" : "รูป"}</span>
+        </div>`
+        )
+        .join("");
+    }
+
+    function removeMedia(index) {
+      mediaList.splice(index, 1);
+      renderMediaPreview();
+    }
+
+    /* ---------- บันทึก ---------- */
+    async function submitForm(e) {
+      e.preventDefault();
+      const errorEl = document.getElementById("form-error");
+      const btn = document.getElementById("submit-btn");
+      errorEl.style.display = "none";
+
+      const original = document.getElementById("p-original").value;
+      const categoryId = document.getElementById("p-category").value;
+
+      const payload = {
+        name: document.getElementById("p-name").value.trim(),
+        price: parseInt(document.getElementById("p-price").value, 10),
+        original_price: original ? parseInt(original, 10) : null,
+        category_id: categoryId ? parseInt(categoryId, 10) : null,
+        description: document.getElementById("p-desc").value.trim(),
+        stock: parseInt(document.getElementById("p-stock").value, 10),
+        free_shipping: document.getElementById("p-free").checked,
+        image: document.getElementById("p-emoji").value.trim() || "📦",
+        media: mediaList,
+      };
+
+      btn.disabled = true;
+      btn.textContent = "กำลังบันทึก...";
+      try {
+        if (editingId) {
+          await updateProduct(editingId, payload);
+          showToast("บันทึกการแก้ไขแล้ว");
+        } else {
+          await createProduct(payload);
+          showToast("ลงขายสินค้าสำเร็จ");
+        }
+        setTimeout(() => (window.location.href = "seller.html"), 700);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = "block";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        btn.disabled = false;
+        btn.textContent = editingId ? "บันทึกการแก้ไข" : "ลงขายสินค้า";
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,12 +1,12 @@
 """ระบบยืนยันตัวตน: เข้ารหัส/ตรวจสอบรหัสผ่าน + ออก/ตรวจสอบ JWT token"""
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
 from jose import JWTError, jwt
 
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+from app.config import SECRET_KEY
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # token หมดอายุใน 1 วัน
 

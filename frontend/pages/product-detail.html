@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>รายละเอียดสินค้า - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="../css/style.css" />
 </head>
 <body>
@@ -13,7 +19,7 @@
       <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
-    <span id="auth-status" data-login-href="login.html"></span>
+    <span id="auth-status" data-base="../"></span>
     <a href="cart.html" class="cart-link">
       🛍️
       <span class="cart-badge" id="cart-badge">0</span>
@@ -25,22 +31,62 @@
     <div id="detail-content">
       <p class="state-message">กำลังโหลดข้อมูลสินค้า...</p>
     </div>
+    <div id="review-content"></div>
   </main>
 
   <script src="../js/api.js"></script>
   <script>
-    const searchForm = document.getElementById("search-form");
-    searchForm.addEventListener("submit", (e) => {
+    document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const q = document.getElementById("search-input").value.trim();
-      window.location.href = q
-        ? `../index.html?search=${encodeURIComponent(q)}`
-        : "../index.html";
+      window.location.href = q ? `../index.html?search=${encodeURIComponent(q)}` : "../index.html";
     });
 
+    let currentProduct = null;
+    let mediaList = [];
+
     function getProductIdFromUrl() {
-      const params = new URLSearchParams(window.location.search);
-      return parseInt(params.get("id"), 10);
+      return parseInt(new URLSearchParams(window.location.search).get("id"), 10);
+    }
+
+    /** แสดงสื่อชิ้นที่เลือกในกรอบใหญ่ (รูปหรือวิดีโอ) */
+    function selectMedia(index) {
+      const main = document.getElementById("gallery-main");
+      const item = mediaList[index];
+      if (!item) return;
+
+      main.innerHTML =
+        item.media_type === "video"
+          ? `<video src="${escapeHtml(item.url)}" controls playsinline></video>`
+          : `<img src="${escapeHtml(item.url)}" alt="${escapeHtml(currentProduct.name)}" />`;
+
+      document.querySelectorAll(".gallery-thumb").forEach((el, i) => {
+        el.classList.toggle("active", i === index);
+      });
+    }
+
+    function galleryHtml(product) {
+      if (!mediaList.length) {
+        // ยังไม่อัปโหลดสื่อ ใช้ emoji ตัวใหญ่แทน
+        return `<div class="gallery-main">${product.image || "📦"}</div>`;
+      }
+      const thumbs = mediaList
+        .map(
+          (m, i) => `
+          <button type="button" class="gallery-thumb ${i === 0 ? "active" : ""}" onclick="selectMedia(${i})">
+            ${
+              m.media_type === "video"
+                ? `<video src="${escapeHtml(m.url)}" muted></video><span class="video-mark">▶</span>`
+                : `<img src="${escapeHtml(m.url)}" alt="" />`
+            }
+          </button>`
+        )
+        .join("");
+      return `
+        <div>
+          <div class="gallery-main" id="gallery-main"></div>
+          ${mediaList.length > 1 ? `<div class="gallery-thumbs">${thumbs}</div>` : ""}
+        </div>`;
     }
 
     async function loadDetail() {
@@ -56,25 +102,32 @@
       try {
         product = await fetchProduct(id);
       } catch (err) {
-        container.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${err.message}</p>`;
+        container.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      if (!product) {
+        container.innerHTML = `<p class="state-message">ไม่พบสินค้านี้ อาจถูกลบหรือปิดขายไปแล้ว</p>`;
         return;
       }
 
-      if (!product) {
-        container.innerHTML = `<p class="state-message">ไม่พบสินค้านี้ อาจถูกลบหรือหมดจำหน่ายแล้ว</p>`;
-        return;
-      }
+      currentProduct = product;
+      mediaList = product.media || [];
 
       const outOfStock = product.stock === 0;
       const lowStock = product.stock > 0 && product.stock <= 5;
 
       container.innerHTML = `
         <div class="detail-layout">
-          <div class="detail-thumb">${product.image}</div>
+          ${galleryHtml(product)}
           <div>
-            <h1 class="detail-name">${product.name}</h1>
-            <div class="detail-shop">ร้านค้า: ${product.shop_name} · ⭐ ${product.rating} · ขายแล้ว ${product.sold.toLocaleString("th-TH")} ชิ้น</div>
-            ${product.free_shipping ? `<span class="badge-free-shipping">จัดส่งฟรี</span>` : ""}
+            <h1 class="detail-name">${escapeHtml(product.name)}</h1>
+            <div class="detail-shop">
+              ร้านค้า: <a href="shop.html?id=${product.shop_id}" style="color: var(--chili); font-weight: 600;">${escapeHtml(product.shop_name)}</a>
+              · ${product.review_count > 0 ? `⭐ ${product.rating} (${product.review_count} รีวิว)` : "ยังไม่มีรีวิว"}
+              · ขายแล้ว ${product.sold.toLocaleString("th-TH")} ชิ้น
+            </div>
+            <span class="pill-muted">${escapeHtml(product.category)}</span>
+            ${product.free_shipping ? `<span class="badge-free-shipping" style="margin-left:8px">จัดส่งฟรี</span>` : ""}
 
             <div class="detail-price-box">
               <div class="detail-price">
@@ -83,7 +136,7 @@
               </div>
             </div>
 
-            <p class="detail-desc">${product.description}</p>
+            <p class="detail-desc">${escapeHtml(product.description) || "ผู้ขายยังไม่ได้ใส่รายละเอียดสินค้า"}</p>
 
             ${
               outOfStock
@@ -94,16 +147,15 @@
                     <button type="button" id="qty-minus">−</button>
                     <input type="number" id="qty-input" value="1" min="1" max="${product.stock}" />
                     <button type="button" id="qty-plus">+</button>
-                    <span style="color:#757575;font-size:0.85rem;">คงเหลือ ${product.stock} ชิ้น</span>
+                    <span style="color: var(--muted); font-size: 0.85rem;">คงเหลือ ${product.stock} ชิ้น</span>
                   </div>
                   ${lowStock ? `<p class="stock-warning">เหลือสินค้าจำนวนน้อย รีบสั่งซื้อก่อนหมด</p>` : ""}
-                  <button class="btn btn-primary" id="add-to-cart-btn">เพิ่มลงตะกร้า</button>
-                  <span id="add-to-cart-msg" style="margin-left:12px;color:#2e7d32;font-size:0.9rem;"></span>
-                `
+                  <button class="btn btn-primary" id="add-to-cart-btn">เพิ่มลงตะกร้า</button>`
             }
           </div>
-        </div>
-      `;
+        </div>`;
+
+      if (mediaList.length) selectMedia(0);
 
       if (!outOfStock) {
         const qtyInput = document.getElementById("qty-input");
@@ -113,24 +165,64 @@
         document.getElementById("qty-plus").addEventListener("click", () => {
           qtyInput.value = Math.min(product.stock, parseInt(qtyInput.value || "1", 10) + 1);
         });
-        document.getElementById("add-to-cart-btn").addEventListener("click", async () => {
+        document.getElementById("add-to-cart-btn").addEventListener("click", async (e) => {
+          const btn = e.currentTarget;
           const qty = Math.max(1, Math.min(product.stock, parseInt(qtyInput.value || "1", 10)));
-          const btn = document.getElementById("add-to-cart-btn");
-          const msg = document.getElementById("add-to-cart-msg");
           btn.disabled = true;
           try {
             await addToCart(product.id, qty);
             await renderCartBadge();
-            msg.style.color = "#2e7d32";
-            msg.textContent = "เพิ่มลงตะกร้าแล้ว ✓";
+            showToast("เพิ่มลงตะกร้าแล้ว ✓");
           } catch (err) {
-            msg.style.color = "#e02424";
-            msg.textContent = "เกิดข้อผิดพลาด: " + err.message;
+            showToast(err.message, "error");
           } finally {
             btn.disabled = false;
           }
         });
       }
+
+      loadReviews(id, product);
+    }
+
+    async function loadReviews(productId, product) {
+      const box = document.getElementById("review-content");
+      let reviews = [];
+      try {
+        reviews = await fetchProductReviews(productId);
+      } catch {
+        return;
+      }
+
+      const list = reviews.length
+        ? reviews
+            .map(
+              (r) => `
+          <div class="review-item">
+            <div class="review-head">
+              <span class="review-author">${escapeHtml(r.user_name)}</span>
+              <span class="review-stars">${starsHtml(r.rating)}</span>
+              <span class="review-date">${formatDate(r.created_at)}</span>
+            </div>
+            <p class="review-comment">${escapeHtml(r.comment) || "(ไม่ได้เขียนข้อความ)"}</p>
+          </div>`
+            )
+            .join("")
+        : `<p class="state-message" style="padding: 30px 10px;">ยังไม่มีรีวิวสำหรับสินค้านี้ — เป็นคนแรกที่รีวิวได้เลยหลังจากสั่งซื้อและได้รับสินค้า</p>`;
+
+      box.innerHTML = `
+        <div class="review-section">
+          <h2 class="panel-title" style="margin-bottom: 14px;">รีวิวจากผู้ซื้อจริง</h2>
+          ${
+            product.review_count > 0
+              ? `<div class="rating-summary">
+                   <span class="rating-score">${product.rating}</span>
+                   <span class="review-stars" style="font-size:1.2rem">${starsHtml(product.rating)}</span>
+                   <span style="color: var(--muted); font-size: 0.88rem;">จาก ${product.review_count} รีวิว</span>
+                 </div>`
+              : ""
+          }
+          ${list}
+        </div>`;
     }
 
     loadDetail();

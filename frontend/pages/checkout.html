@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ยืนยันคำสั่งซื้อ - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <div style="flex: 1"></div>
+    <span id="auth-status" data-base="../"></span>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <a href="cart.html" class="back-link">← กลับไปตะกร้าสินค้า</a>
+    <p class="page-title">ยืนยันคำสั่งซื้อ</p>
+    <div id="checkout-body"><p class="state-message">กำลังโหลด...</p></div>
+  </main>
+
+  <script src="../js/api.js"></script>
+  <script>
+    const PAY_OPTIONS = [
+      { value: "COD", icon: "💵", label: "เก็บเงินปลายทาง", desc: "จ่ายเงินสดกับพนักงานส่งของตอนรับสินค้า" },
+      { value: "BANK_TRANSFER", icon: "🏦", label: "โอนผ่านธนาคาร", desc: "โอนแล้วกดยืนยันการชำระเงินในหน้าคำสั่งซื้อ" },
+      { value: "CARD", icon: "💳", label: "บัตรเครดิต/เดบิต", desc: "ตัดบัตรทันที (โหมดทดสอบ ไม่มีการเรียกเก็บเงินจริง)" },
+    ];
+
+    // ต้องตรงกับ SHIPPING_FEE / FREE_SHIPPING_MIN ใน backend/app/crud.py
+    const SHIPPING_FEE = 40;
+    const FREE_SHIPPING_MIN = 500;
+
+    let cartData = null;
+
+    async function loadCheckout() {
+      const body = document.getElementById("checkout-body");
+
+      if (!isLoggedIn()) {
+        requireLogin("../");
+        return;
+      }
+
+      try {
+        cartData = await fetchCart();
+      } catch (err) {
+        body.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+
+      if (!cartData.items.length) {
+        body.innerHTML = `<p class="state-message">ตะกร้าว่าง —
+          <a href="../index.html" style="color: var(--chili);">ไปเลือกซื้อสินค้าก่อน</a></p>`;
+        return;
+      }
+
+      const user = await fetchMe();
+
+      body.innerHTML = `
+        <div class="checkout-layout">
+          <div>
+            <div class="panel">
+              <h2 class="panel-title" style="margin-bottom:16px;">ที่อยู่จัดส่ง</h2>
+              <p class="alert alert-error" id="checkout-error" style="display:none;"></p>
+              <form id="checkout-form">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="recipient-name">ชื่อผู้รับ *</label>
+                    <input type="text" id="recipient-name" required value="${escapeHtml(user?.name || "")}" />
+                  </div>
+                  <div class="form-group">
+                    <label for="recipient-phone">เบอร์โทรศัพท์ *</label>
+                    <input type="tel" id="recipient-phone" required placeholder="08x-xxx-xxxx" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="address">ที่อยู่จัดส่ง *</label>
+                  <textarea id="address" rows="3" required
+                    placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="note">หมายเหตุถึงร้านค้า (ไม่บังคับ)</label>
+                  <textarea id="note" rows="2" placeholder="เช่น ฝากไว้ที่นิติบุคคล"></textarea>
+                </div>
+              </form>
+            </div>
+
+            <div class="panel">
+              <h2 class="panel-title" style="margin-bottom:16px;">วิธีชำระเงิน</h2>
+              ${PAY_OPTIONS.map(
+                (opt, i) => `
+                <label class="pay-option ${i === 0 ? "selected" : ""}" data-value="${opt.value}">
+                  <input type="radio" name="payment" value="${opt.value}" ${i === 0 ? "checked" : ""} />
+                  <span class="pay-option-icon">${opt.icon}</span>
+                  <span>
+                    <div>${opt.label}</div>
+                    <div class="pay-option-desc">${opt.desc}</div>
+                  </span>
+                </label>`
+              ).join("")}
+            </div>
+
+            <div class="panel">
+              <h2 class="panel-title" style="margin-bottom:16px;">สรุปรายการ (แยกตามร้าน)</h2>
+              ${renderShopGroups()}
+            </div>
+          </div>
+
+          <div class="summary-panel">
+            <h2 style="font-family: var(--font-display); margin: 0 0 14px; font-size: 1.15rem;">ยอดที่ต้องชำระ</h2>
+            ${renderSummaryRows()}
+            <button class="btn btn-primary" id="place-order-btn" style="width: 100%; margin-top: 16px;">
+              ยืนยันคำสั่งซื้อ
+            </button>
+            <p style="font-size: 0.74rem; opacity: 0.65; margin: 10px 0 0; text-align: center;">
+              ค่าส่ง ฿40/ร้าน · ซื้อครบ ฿500 ต่อร้าน ส่งฟรี
+            </p>
+          </div>
+        </div>`;
+
+      // ไฮไลต์ตัวเลือกที่เลือกอยู่
+      document.querySelectorAll(".pay-option").forEach((el) => {
+        el.addEventListener("click", () => {
+          document.querySelectorAll(".pay-option").forEach((o) => o.classList.remove("selected"));
+          el.classList.add("selected");
+        });
+      });
+
+      document.getElementById("place-order-btn").addEventListener("click", placeOrder);
+    }
+
+    /** จัดกลุ่มรายการในตะกร้าตามร้าน + คำนวณค่าส่งแบบเดียวกับ backend เพื่อให้ตัวเลขตรงกัน */
+    function groupByShop() {
+      const groups = {};
+      cartData.items.forEach((item) => {
+        const key = item.shop_id || 0;
+        groups[key] = groups[key] || { name: item.shop_name || "ไม่ระบุร้าน", items: [] };
+        groups[key].items.push(item);
+      });
+      return Object.values(groups).map((g) => {
+        const subtotal = g.items.reduce((s, i) => s + i.price * i.quantity, 0);
+        const allFree = g.items.every((i) => i.free_shipping);
+        const shipping = allFree || subtotal >= FREE_SHIPPING_MIN ? 0 : SHIPPING_FEE;
+        return { ...g, subtotal, shipping };
+      });
+    }
+
+    function renderShopGroups() {
+      return groupByShop()
+        .map(
+          (g) => `
+        <div class="shop-group">
+          <div class="shop-group-head">🏪 ${escapeHtml(g.name)}</div>
+          ${g.items
+            .map(
+              (i) => `
+            <div class="order-line">
+              <div class="order-line-thumb">${productThumb(i)}</div>
+              <div class="order-line-info">
+                <div class="order-line-name">${escapeHtml(i.name)}</div>
+                <div class="order-line-meta">${formatBaht(i.price)} × ${i.quantity}</div>
+              </div>
+              <div class="cart-item-price">${formatBaht(i.price * i.quantity)}</div>
+            </div>`
+            )
+            .join("")}
+          <div class="order-line-meta" style="padding-top: 10px; text-align: right;">
+            ค่าจัดส่ง: ${g.shipping === 0 ? "<b style='color:var(--chili)'>ฟรี</b>" : formatBaht(g.shipping)}
+          </div>
+        </div>`
+        )
+        .join("");
+    }
+
+    function renderSummaryRows() {
+      const groups = groupByShop();
+      const subtotal = groups.reduce((s, g) => s + g.subtotal, 0);
+      const shipping = groups.reduce((s, g) => s + g.shipping, 0);
+      const count = cartData.items.reduce((s, i) => s + i.quantity, 0);
+      return `
+        <div class="summary-row"><span>สินค้า (${count} ชิ้น)</span><span>${formatBaht(subtotal)}</span></div>
+        <div class="summary-row"><span>ค่าจัดส่ง (${groups.length} ร้าน)</span><span>${formatBaht(shipping)}</span></div>
+        <div class="summary-row grand"><span>รวมทั้งสิ้น</span><span>${formatBaht(subtotal + shipping)}</span></div>`;
+    }
+
+    async function placeOrder(e) {
+      const btn = e.currentTarget;
+      const errorEl = document.getElementById("checkout-error");
+      errorEl.style.display = "none";
+
+      const payload = {
+        recipient_name: document.getElementById("recipient-name").value.trim(),
+        recipient_phone: document.getElementById("recipient-phone").value.trim(),
+        address: document.getElementById("address").value.trim(),
+        note: document.getElementById("note").value.trim(),
+        payment_method: document.querySelector('input[name="payment"]:checked').value,
+      };
+
+      if (!payload.recipient_name || !payload.recipient_phone || !payload.address) {
+        errorEl.textContent = "กรุณากรอกชื่อผู้รับ เบอร์โทร และที่อยู่จัดส่งให้ครบถ้วน";
+        errorEl.style.display = "block";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "กำลังสร้างคำสั่งซื้อ...";
+      try {
+        const orders = await checkout(payload);
+        await renderCartBadge();
+        showToast(`สั่งซื้อสำเร็จ ${orders.length} คำสั่งซื้อ`);
+        setTimeout(() => (window.location.href = "orders.html"), 800);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = "block";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        btn.disabled = false;
+        btn.textContent = "ยืนยันคำสั่งซื้อ";
+      }
+    }
+
+    loadCheckout();
+  </script>
+</body>
+</html>

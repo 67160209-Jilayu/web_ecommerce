@@ -1,13 +1,17 @@
 """การเชื่อมต่อฐานข้อมูล PostgreSQL ผ่าน SQLModel"""
-import os
-
 from sqlmodel import Session, SQLModel, create_engine
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://appuser:apppassword@db:5432/appdb"
-)
+from app.config import DATABASE_URL
 
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    # ฐานข้อมูลบนคลาวด์มักตัดการเชื่อมต่อที่ปล่อยว่างนานๆ ทิ้ง (โดยเฉพาะ free tier)
+    # pool_pre_ping จะทดสอบ connection ก่อนใช้ทุกครั้ง ถ้าตายแล้วจะต่อใหม่ให้เอง
+    # ไม่งั้นผู้ใช้คนแรกหลังเว็บถูกปล่อยว่างจะเจอ error
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 
 
 def create_db_and_tables() -> None:

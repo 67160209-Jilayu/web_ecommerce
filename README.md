@@ -1,22 +1,25 @@
 67160209 จิรายุ สกุลวงศ์นาวี
 67160207 กิตติพศ ระบาย
-# ShopMarket — Marketplace ค้นหาและสั่งซื้อสินค้า
+# ShopMarket — Marketplace ซื้อ-ขายออนไลน์
 
 โปรเจกต์จาก User Journey ข้อ 2 (อีคอมเมิร์ซ) ทำตามแนวทาง "จาก User Journey สู่โค้ดจริงด้วย AI"
 
-**ตอนนี้อยู่สัปดาห์ 4** — มีระบบสมัคร/ล็อกอิน (JWT) แล้ว endpoint ที่แก้ไขข้อมูลต้องล็อกอินก่อน ยังไม่ deploy
+**สถานะ: marketplace ครบวงจร พร้อม deploy** — ผู้ใช้คนเดียวกันเป็นได้ทั้งผู้ซื้อและผู้ขาย
+เปิดร้าน → ลงขายสินค้าพร้อมอัปโหลดรูป/วิดีโอ → ลูกค้าสั่งซื้อ ชำระเงิน ติดตามสถานะ และรีวิวได้จริง
+
+📘 **จะ deploy ขึ้นอินเทอร์เน็ต ดูขั้นตอนทั้งหมดที่ [docs/deployment.md](docs/deployment.md)**
 
 ## Tech Stack
-- Backend: FastAPI (Python)
+- Backend: FastAPI (Python) + SQLModel
 - Frontend: HTML + CSS + JS ธรรมดา ไม่มี framework
-- Database: PostgreSQL ผ่าน Docker Compose (ต่อจริงแล้ว ใช้ SQLModel)
+- Database: PostgreSQL
 - รันทั้งระบบด้วย Docker + Docker Compose
 
 ## วิธีรัน (ต้องมี Docker Desktop)
 
 ```bash
 cp .env.example .env
-docker compose up
+docker compose up -d --build
 ```
 
 เปิดดูที่:
@@ -25,77 +28,141 @@ docker compose up
 
 ปิดด้วย `docker compose down`
 
-> ต้องรันผ่าน Docker เท่านั้น รัน `uvicorn` ตรงๆ นอก container ไม่ได้ เพราะ path โฟลเดอร์ `frontend` อ้างอิงตาม `WORKDIR /app` ใน Dockerfile
+> **ถ้าเจอ error `column ... does not exist`** แปลว่าโครงสร้างตารางใน DB เก่าไม่ตรงกับโค้ดปัจจุบัน
+> (โปรเจกต์ยังไม่มีระบบ migration) แก้ด้วย `docker compose down -v` แล้ว `docker compose up -d --build` ใหม่
+
+> ต้องรันผ่าน Docker เท่านั้น รัน `uvicorn` ตรงๆ นอก container ไม่ได้ เพราะ path โฟลเดอร์ `frontend`
+> และ `uploads` อ้างอิงตาม `WORKDIR /app` ใน Dockerfile
+
+### บัญชีตัวอย่างสำหรับทดลอง
+| อีเมล | รหัสผ่าน | ร้าน |
+|---|---|---|
+| mango@shopmarket.test | mango1234 | mango |
+
+ระบบไม่มีสินค้าตัวอย่างมาให้ — ล็อกอินด้วยบัญชีนี้แล้วกด "ร้านของฉัน → ลงขายสินค้าใหม่"
+เพื่อเพิ่มสินค้าเอง หรือสมัครบัญชีใหม่แล้วเปิดร้านของตัวเองก็ได้
+
+## ฟีเจอร์หลัก
+
+**ฝั่งผู้ซื้อ**
+- ค้นหา / กรองตามหมวดหมู่ / กรองช่วงราคา / เรียงตามราคา-ยอดขาย-คะแนน
+- ดูรายละเอียดสินค้าพร้อมแกลเลอรีรูปและวิดีโอ + อ่านรีวิวจากผู้ซื้อจริง
+- ตะกร้าสินค้า (guest ก็ใช้ได้ พอล็อกอินตะกร้าจะถูกผูกเข้าบัญชีให้อัตโนมัติ)
+- สั่งซื้อ เลือกวิธีชำระเงิน 3 ช่องทาง ติดตามสถานะ ยกเลิก และรีวิวหลังได้รับของ
+
+**ฝั่งผู้ขาย**
+- เปิดร้านฟรี (1 บัญชี 1 ร้าน)
+- ลงขายสินค้า อัปโหลดรูป/วิดีโอ (ลากไฟล์มาวางได้) แก้ไข ปิดขาย
+- แดชบอร์ดดูสินค้าทั้งหมด รับคำสั่งซื้อ กดจัดส่ง ยกเลิก
+- ดูคะแนนรีวิวร้านที่คำนวณจากรีวิวจริง
 
 ## โครงสร้างโปรเจกต์
 ```
-backend/app/main.py                 จุดเริ่มแอป: API router + เชื่อม DB + mount static files
+backend/app/main.py                 จุดเริ่มแอป: API router + เชื่อม DB + serve uploads/frontend
 backend/app/database.py             เชื่อมต่อ PostgreSQL (SQLModel engine/session)
-backend/app/models.py               โครงสร้างตาราง Shop, Product, Cart, CartItem, User
+backend/app/models.py               ตาราง: User, Shop, Category, Product, ProductMedia,
+                                    Cart, CartItem, Order, OrderItem, Review
 backend/app/schemas.py              รูปแบบข้อมูลรับ-ส่งผ่าน API
-backend/app/crud.py                 ฟังก์ชันอ่าน/เขียนฐานข้อมูล
-backend/app/auth.py                 hash รหัสผ่าน + ออก/ตรวจสอบ JWT token
-backend/app/seed.py                 ใส่ข้อมูลตัวอย่างตอนเริ่มระบบครั้งแรก
-backend/app/routers/products.py     API สินค้า (GET/POST /api/products) — POST ต้องล็อกอิน
-backend/app/routers/shops.py        API ร้านค้า (GET/POST /api/shops) — POST ต้องล็อกอิน
-backend/app/routers/cart.py         API ตะกร้าสินค้า (GET/POST/PATCH/DELETE)
-backend/app/routers/auth.py         API สมัคร/ล็อกอิน (register/login/me)
-frontend/index.html                 หน้าค้นหา + รายการสินค้า
-frontend/pages/product-detail.html  หน้ารายละเอียดสินค้า + เพิ่มตะกร้า (เรียก API จริง)
-frontend/pages/cart.html            หน้าตะกร้าสินค้า (เรียก API จริง ไม่ใช้ localStorage แล้ว)
-frontend/pages/login.html           หน้าสมัครสมาชิก/เข้าสู่ระบบ
+backend/app/crud.py                 business logic ทั้งหมด (checkout, สิทธิ์, คำนวณ rating)
+backend/app/auth.py                 hash รหัสผ่าน (bcrypt) + ออก/ตรวจสอบ JWT
+backend/app/seed.py                 ข้อมูลตั้งต้น: หมวดหมู่ 6 หมวด + ร้าน mango (ไม่มีสินค้าตัวอย่าง)
+backend/app/storage.py              จัดการไฟล์อัปโหลดบนดิสก์ (แปลง URL↔path, ลบไฟล์)
+backend/app/config.py               ค่าตั้งค่าจาก environment variable + ตรวจความปลอดภัยตอน startup
+backend/app/routers/
+    auth.py        สมัคร/ล็อกอิน/ข้อมูลผู้ใช้
+    categories.py  หมวดหมู่สินค้า
+    uploads.py     อัปโหลดรูป/วิดีโอ
+    products.py    สินค้า (อ่านได้ทุกคน, เขียนเฉพาะเจ้าของร้าน)
+    shops.py       ร้านค้า
+    cart.py        ตะกร้าสินค้า
+    orders.py      คำสั่งซื้อ + เปลี่ยนสถานะ
+    reviews.py     รีวิว
+
+frontend/index.html                 หน้าแรก: ค้นหา + หมวดหมู่ + ตัวกรอง
+frontend/pages/product-detail.html  รายละเอียดสินค้า + แกลเลอรีสื่อ + รีวิว
+frontend/pages/shop.html            หน้าร้านค้า
+frontend/pages/cart.html            ตะกร้าสินค้า (จัดกลุ่มตามร้าน)
+frontend/pages/checkout.html        กรอกที่อยู่ + เลือกวิธีชำระเงิน
+frontend/pages/orders.html          คำสั่งซื้อของฉัน + ติดตามสถานะ + เขียนรีวิว
+frontend/pages/seller.html          แดชบอร์ดร้าน (สินค้า / คำสั่งซื้อ / ตั้งค่า)
+frontend/pages/product-form.html    ฟอร์มลงขาย-แก้ไขสินค้า + อัปโหลดสื่อ
+frontend/pages/login.html           สมัครสมาชิก / เข้าสู่ระบบ
+
 docs/user-journey.md                User Journey ที่ใช้อ้างอิง
-docs/er-diagram.md                  โครงสร้างตาราง + ความสัมพันธ์
-docs/api-spec.md                    รายการ API endpoint
+docs/er-diagram.md                  โครงสร้างตาราง + เหตุผลการออกแบบ + flow สถานะออเดอร์
+docs/api-spec.md                    รายการ API endpoint ทั้งหมด
+docs/deployment.md                  คู่มือ deploy ขึ้น Render/Railway ทีละขั้น
+render.yaml                         Blueprint สร้างเว็บ+ฐานข้อมูลบน Render ในคลิกเดียว
 ```
 
+## Edge Cases ที่ระบบจัดการ
 
-## Edge Cases ที่ทำแล้ว
-- สินค้าหมด → ปิดปุ่มสั่งซื้อ, badge "สินค้าหมด"
-- สต็อกเหลือน้อย (≤5) → แจ้งเตือน
-- ค้นหาไม่พบ → แสดงข้อความแทนหน้าว่าง
-- จำกัดจำนวนในตะกร้าไม่เกิน stock (เช็คที่ backend จริงแล้ว ไม่ใช่แค่ฝั่ง frontend)
-- ตะกร้าผูกกับ browser ผ่าน token ใน localStorage (คนละเครื่อง/เบราว์เซอร์ = คนละตะกร้า)
-- **สินค้าหมดสต็อกระหว่างลูกค้ากำลังเช็คเอาท์** (จากเอกสาร User Journey) → ล็อก row สินค้าไว้ระหว่าง
-  transaction ตอนเพิ่มลงตะกร้า กันสองคำขอพร้อมกันอ่าน stock ค่าเดิมแล้วเผลอเกินจำนวนจริง (race condition)
-- สมัครสมาชิกด้วยอีเมลซ้ำ → 400 พร้อมข้อความชัดเจน
-- ล็อกอินด้วยอีเมล/รหัสผ่านผิด → 401 พร้อมข้อความชัดเจน
-- เรียก endpoint ที่ต้องล็อกอินโดยไม่มี/token หมดอายุ → 401 เสมอ
-
-ที่เหลือ (รอสัปดาห์ 5) ดูใน [docs/user-journey.md](docs/user-journey.md)
+| กรณี | ผลลัพธ์ |
+|---|---|
+| สินค้าหมด / ใกล้หมด (≤5) | ปิดปุ่มสั่งซื้อ / แจ้งเตือนให้รีบซื้อ |
+| ค้นหาหรือกรองแล้วไม่พบ | แสดงข้อความแนะนำแทนหน้าว่าง |
+| ซื้อสินค้าของร้านตัวเอง | บล็อกทั้งตอนใส่ตะกร้าและตอน checkout |
+| **สองคนแย่งซื้อชิ้นสุดท้ายพร้อมกัน** | ล็อก row ด้วย `SELECT … FOR UPDATE` — stock ไม่มีทางติดลบ |
+| stock ไม่พอตอน checkout | แจ้งชื่อสินค้าที่ไม่พอ และไม่สร้างออเดอร์ค้างไว้ครึ่งๆ |
+| ร้านขึ้นราคาหลังลูกค้าสั่งไปแล้ว | ใบสั่งซื้อใช้ราคา snapshot ตอนสั่ง ไม่เปลี่ยนตาม |
+| ยกเลิกคำสั่งซื้อ | คืน stock + หักยอดขายอัตโนมัติ |
+| สินค้าถูกปิดขายแต่ค้างในตะกร้า | ข้ามตอน checkout ไม่ทำให้ทั้งออเดอร์ล้ม |
+| ตะกร้ามีสินค้าหลายร้าน | แยกเป็นคนละคำสั่งซื้ออัตโนมัติ (แต่ละร้านส่งของแยกกัน) |
+| รีวิวซ้ำ / รีวิวก่อนได้รับของ | ปฏิเสธ (1 รายการที่ซื้อ รีวิวได้ครั้งเดียว) |
+| อัปโหลดไฟล์ผิดชนิด/ใหญ่เกิน | ปฏิเสธพร้อมบอกขนาดที่รับได้ |
+| แก้/ลบสินค้าคนอื่น, ดูออเดอร์คนอื่น | 403 |
+| ลบสินค้าที่เคยมีคนสั่งซื้อ | ปิดขายแทนลบจริง ประวัติคำสั่งซื้อยังครบ |
+| เอารูป/วิดีโอออกจากสินค้า | ลบไฟล์บนดิสก์ให้ด้วย เว้นแต่มีสินค้าชิ้นอื่นใช้ไฟล์เดียวกันอยู่ |
+| ใช้เครื่องร่วมกันแล้วออกจากระบบ | ล้าง cart token + backend ปฏิเสธการ claim ตะกร้าของบัญชีอื่น |
 
 ## Prompt ที่ใช้ (แยกตามสัปดาห์)
 
-### สัปดาห์ 1 — Frontend scaffold (ทำแล้ว)
+### สัปดาห์ 1 — Frontend scaffold
 > สร้าง FastAPI backend ที่ serve static frontend ในตัวเดียว มี router `products.py` คืน mock data
 > ตาม User Journey "อีคอมเมิร์ซ — Marketplace: ค้นหาและสั่งซื้อสินค้า" พร้อมหน้า HTML 3 หน้า
 > (ค้นหา/รายการสินค้า, รายละเอียดสินค้า, ตะกร้าสินค้า) เรียก API ด้วย `fetch()` และรองรับ
 > Edge Case: สินค้าหมด, สต็อกใกล้หมด, ค้นหาไม่พบ
 
-### สัปดาห์ 2 — Database + Backend จริง (ทำแล้ว)
+### สัปดาห์ 2 — Database + Backend จริง
 > จาก User Journey นี้ ช่วยออกแบบ Database Schema โดยใช้ SQLModel (Python) แยก entity Shop
 > กับ Product ออกจากกัน (ความสัมพันธ์ one-to-many) เพราะ Pain Point ในเอกสารบอกว่าลูกค้า
-> "ไม่รู้จะเชื่อร้านไหน" จากนั้นย้าย endpoint `GET /api/products`, `GET /api/products/{id}`
-> จาก mock data ไปอ่าน/เขียนจาก PostgreSQL จริง พร้อมเพิ่ม `POST /api/products` และ
-> router `shops.py` (`GET`/`POST /api/shops`) โดยคง response shape เดิมไว้ (field `shop_name`
-> แบบ flatten) เพื่อไม่ต้องแก้ frontend ที่เขียนไว้ตั้งแต่สัปดาห์ 1
+> "ไม่รู้จะเชื่อร้านไหน" จากนั้นย้าย endpoint จาก mock data ไปอ่าน/เขียนจาก PostgreSQL จริง
+> โดยคง response shape เดิมไว้ เพื่อไม่ต้องแก้ frontend ที่เขียนไว้ตั้งแต่สัปดาห์ 1
 
-### สัปดาห์ 3 — เชื่อม frontend กับ backend จริง (ทำแล้ว)
+### สัปดาห์ 3 — เชื่อม frontend กับ backend จริง
 > ย้ายตะกร้าสินค้าจาก localStorage ไปเป็นตาราง Cart/CartItem จริงใน PostgreSQL โดยที่ยังไม่มี
-> ระบบล็อกอิน ให้ frontend สร้าง token (UUID) เก็บใน localStorage เองแล้วส่งไปผูกกับตะกร้าใน DB
-> แทน user_id ชั่วคราว เพิ่ม router `cart.py` ครบ CRUD (`GET/POST /api/cart/{token}`,
-> `PATCH`/`DELETE /api/cart/{token}/items/{product_id}`) แล้วแก้ `js/api.js`,
-> `product-detail.html`, `cart.html` ให้เรียก API จริงแทนฟังก์ชัน localStorage เดิมทั้งหมด
-> โดยคง UI/UX เดิมไว้ไม่เปลี่ยน
+> ระบบล็อกอิน ให้ frontend สร้าง token เก็บใน localStorage แล้วส่งไปผูกกับตะกร้าใน DB
+> เพิ่ม router `cart.py` ครบ CRUD แล้วแก้ frontend ให้เรียก API จริงแทน localStorage ทั้งหมด
 
-### สัปดาห์ 4 — ระบบล็อกอิน + Edge Case เพิ่ม (ทำแล้ว)
-> เพิ่มระบบสมัคร/ล็อกอินด้วย JWT ตามมาตรฐาน OAuth2PasswordBearer ของ FastAPI (ใช้ bcrypt เข้ารหัส
-> รหัสผ่าน) สร้าง router `auth.py` (`register`/`login`/`me`) แล้วเอา dependency
-> `get_current_user` ไปผูกกับ `POST /api/products` และ `POST /api/shops` ให้ต้องล็อกอินก่อนถึงจะ
-> เรียกได้ พร้อมทำหน้า `login.html` (สมัคร/เข้าสู่ระบบในหน้าเดียว) และแสดงสถานะล็อกอินที่ header
-> ทุกหน้า จากนั้นแก้ Edge Case จากเอกสาร User Journey เรื่อง "สินค้าหมดสต็อกระหว่างลูกค้ากำลัง
-> เช็คเอาท์" โดยเพิ่ม row-level lock (`SELECT ... FOR UPDATE`) ตอนเพิ่มสินค้าลงตะกร้า กัน race
-> condition เวลามีคำขอพร้อมกันหลายคำขอแย่งสินค้าที่เหลือน้อย
+### สัปดาห์ 4 — ระบบล็อกอิน + Edge Case
+> เพิ่มระบบสมัคร/ล็อกอินด้วย JWT ตามมาตรฐาน OAuth2PasswordBearer ของ FastAPI (bcrypt เข้ารหัส
+> รหัสผ่าน) แล้วเอา dependency `get_current_user` ไปผูกกับ endpoint ที่สร้าง/แก้ข้อมูล
+> พร้อมแก้ Edge Case "สินค้าหมดสต็อกระหว่างลูกค้ากำลังเช็คเอาท์" ด้วย row-level lock
+> (`SELECT ... FOR UPDATE`) ตอนเพิ่มสินค้าลงตะกร้า
+
+### ปรับดีไซน์เว็บ (ระหว่างสัปดาห์ 4-5)
+> ออกแบบหน้าเว็บใหม่ให้มีเอกลักษณ์ ไม่ใช้ template อีคอมเมิร์ซทั่วไป — เลือกแนวทาง
+> "ท้องทะเลลึก" หัวเว็บกรมท่าเข้มมีพื้นผิวตัดกับเนื้อหาสีฟ้าอ่อน ใช้ฟอนต์ไทยที่มีคาแรกเตอร์
+> (Taviraj + Chakra Petch) พร้อม hero section ตัดขอบทแยง, sticker badge, และ stagger animation
+> — เปลี่ยนธีมทั้งเว็บได้จาก `:root` บล็อกเดียวใน `style.css` เพราะทุกสี (รวมเงา/แสงโปร่งใส)
+> อ้างตัวแปร CSS ไม่มีค่าสีเขียนซ้ำกระจายในไฟล์
+
+### สัปดาห์ 5 — Marketplace เต็มรูปแบบ (โพสขายได้ + ซื้อได้ + อัปโหลดสื่อ)
+> ยกระดับเป็น marketplace แบบ Shopee ที่ผู้ใช้คนเดียวกันเป็นได้ทั้งผู้ซื้อและผู้ขาย:
+> ผูก Shop กับ User (1 คน 1 ร้าน), เพิ่มตาราง Category / ProductMedia / Order / OrderItem / Review,
+> ทำ endpoint อัปโหลดรูปและวิดีโอเก็บลง Docker volume, ระบบ checkout ที่แยก 1 ออเดอร์ต่อ 1 ร้าน
+> พร้อมตัด stock แบบล็อก row, ชำระเงิน mock 3 ช่องทาง (ปลายทาง/โอน/บัตร), วงจรสถานะออเดอร์
+> ครบตั้งแต่รอชำระจนถึงรีวิว, และระบบรีวิวที่ผูกกับ order_item_id เพื่อบังคับว่ารีวิวได้เฉพาะ
+> สินค้าที่ซื้อจริงและได้รับแล้วเท่านั้น พร้อมหน้าเว็บใหม่: checkout, orders, seller dashboard,
+> product form, หน้าร้าน — ใช้ design system เดิมที่มีอยู่แล้วต่อยอด ไม่รื้อใหม่
+
+## Roadmap ถัดไป
+- ระบบ migration (Alembic) เพื่อไม่ต้อง `down -v` ทุกครั้งที่แก้ schema
+- Pagination ของ `GET /products` (ตอนนี้คืนสินค้าทั้งหมดในครั้งเดียว)
+- ย้ายไฟล์อัปโหลดไป object storage (Cloudinary/S3) แทนดิสก์ของเซิร์ฟเวอร์
+  — ดูเหตุผลและทางเลือกใน [docs/deployment.md](docs/deployment.md)
+- ค้นหาแบบ full-text index ฝั่ง DB (ตอนนี้กรองคำค้นในหน่วยความจำ)
+- แจ้งเตือนเมื่อสถานะพัสดุเปลี่ยน (ตาม Acceptance Criteria ในเอกสาร User Journey)
 
 ## Deploy URL
-_ยังไม่ deploy — จะใส่ลิงก์ตรงนี้หลังต่อ hosting_
+_ยังไม่ deploy — ใส่ลิงก์ตรงนี้หลัง deploy เสร็จ (ดูขั้นตอนใน [docs/deployment.md](docs/deployment.md))_

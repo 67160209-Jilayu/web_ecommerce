@@ -1,13 +1,16 @@
-"""Router ตะกร้าสินค้า — สัปดาห์ 3: ย้ายจาก localStorage มาเป็น DB จริง
+"""Router ตะกร้าสินค้า
 
-ตะกร้าผูกกับ browser ผ่าน `token` (สร้างฝั่ง frontend เก็บใน localStorage) แทน user_id
-เพราะยังไม่มีระบบล็อกอิน (รอสัปดาห์ 4 ถึงจะผูกกับผู้ใช้จริง)
+ตะกร้าผูกกับ browser ผ่าน `token` (frontend สร้างเก็บใน localStorage)
+เมื่อผู้ใช้ล็อกอิน จะเรียก /merge เพื่อผูกตะกร้านั้นเข้ากับบัญชี
 """
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from app import crud, schemas
+from app import crud, models, schemas
 from app.database import get_session
+from app.routers.auth import get_current_user, get_optional_user
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -20,11 +23,14 @@ def get_cart(token: str, session: Session = Depends(get_session)):
 
 @router.post("/{token}/items", response_model=schemas.CartRead, status_code=201)
 def add_item(
-    token: str, data: schemas.CartItemCreate, session: Session = Depends(get_session)
+    token: str,
+    data: schemas.CartItemCreate,
+    session: Session = Depends(get_session),
+    current_user: Optional[models.User] = Depends(get_optional_user),
 ):
     """เพิ่มสินค้าลงตะกร้า (ถ้ามีอยู่แล้วจะบวกจำนวนเพิ่ม ไม่เกิน stock คงเหลือ)"""
     try:
-        return crud.add_cart_item(session, token, data)
+        return crud.add_cart_item(session, token, data, user=current_user)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 
@@ -50,3 +56,13 @@ def remove_item(token: str, product_id: int, session: Session = Depends(get_sess
         return crud.remove_cart_item(session, token, product_id)
     except ValueError as err:
         raise HTTPException(status_code=404, detail=str(err))
+
+
+@router.post("/{token}/merge", response_model=schemas.CartRead)
+def merge_cart(
+    token: str,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(get_current_user),
+):
+    """ผูกตะกร้า guest เข้ากับบัญชีที่เพิ่งล็อกอิน (รวมกับตะกร้าเดิมของบัญชีถ้ามี)"""
+    return crud.merge_cart_to_user(session, token, current_user)

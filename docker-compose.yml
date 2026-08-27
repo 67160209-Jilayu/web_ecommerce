@@ -8,6 +8,7 @@ services:
     volumes:
       - ./backend/app:/app/app # แก้โค้ดฝั่งเครื่อง เห็นผลทันทีไม่ต้อง build ใหม่
       - ./frontend:/app/frontend # FastAPI serve ไฟล์ frontend จากโฟลเดอร์นี้
+      - uploads_data:/app/uploads # ไฟล์ที่ผู้ขายอัปโหลด ต้องอยู่ใน volume ไม่งั้นหายตอน restart
     env_file: .env
     depends_on:
       db:
@@ -31,3 +32,4 @@ services:
 
 volumes:
   db_data:
+  uploads_data:

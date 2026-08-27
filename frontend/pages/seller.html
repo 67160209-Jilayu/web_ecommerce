@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ร้านของฉัน - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <div style="flex: 1"></div>
+    <span id="auth-status" data-base="../"></span>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <div id="seller-body"><p class="state-message">กำลังโหลด...</p></div>
+  </main>
+
+  <script src="../js/api.js"></script>
+  <script>
+    let myShop = null;
+    let activeTab = "products";
+
+    async function loadSeller() {
+      const body = document.getElementById("seller-body");
+
+      if (!isLoggedIn()) {
+        requireLogin("../");
+        return;
+      }
+
+      try {
+        myShop = await fetchMyShop();
+      } catch (err) {
+        body.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+
+      if (!myShop) {
+        renderOpenShopForm();
+        return;
+      }
+      renderDashboard();
+    }
+
+    /** ยังไม่มีร้าน → แสดงฟอร์มเปิดร้าน */
+    function renderOpenShopForm() {
+      document.getElementById("seller-body").innerHTML = `
+        <p class="page-title">เปิดร้านค้าของคุณ</p>
+        <div class="panel" style="max-width: 520px;">
+          <p class="alert alert-info">
+            เปิดร้านฟรี ไม่มีค่าธรรมเนียม — 1 บัญชีเปิดได้ 1 ร้าน
+            หลังเปิดร้านแล้วคุณจะลงขายสินค้าและรับคำสั่งซื้อได้ทันที
+          </p>
+          <p class="alert alert-error" id="shop-error" style="display:none;"></p>
+          <form id="open-shop-form">
+            <div class="form-group">
+              <label for="shop-name">ชื่อร้าน *</label>
+              <input type="text" id="shop-name" required maxlength="60" placeholder="เช่น บ้านสวนของฝาก" />
+            </div>
+            <div class="form-group">
+              <label for="shop-desc">คำโปรยร้าน</label>
+              <textarea id="shop-desc" rows="3" placeholder="บอกลูกค้าหน่อยว่าร้านคุณขายอะไร เด่นเรื่องอะไร"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">เปิดร้านเลย</button>
+          </form>
+        </div>`;
+
+      document.getElementById("open-shop-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const errorEl = document.getElementById("shop-error");
+        errorEl.style.display = "none";
+        try {
+          myShop = await createShop({
+            name: document.getElementById("shop-name").value.trim(),
+            description: document.getElementById("shop-desc").value.trim(),
+          });
+          showToast("เปิดร้านสำเร็จ! ลงขายสินค้าชิ้นแรกได้เลย");
+          renderDashboard();
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.style.display = "block";
+        }
+      });
+    }
+
+    function renderDashboard() {
+      document.getElementById("seller-body").innerHTML = `
+        <div class="shop-banner">
+          <h1>🏪 ${escapeHtml(myShop.name)}</h1>
+          <p>${escapeHtml(myShop.description) || "ยังไม่ได้ใส่คำโปรยร้าน"}</p>
+          <div class="shop-stats">
+            <span>สินค้า ${myShop.product_count} รายการ</span>
+            <span>${myShop.review_count > 0 ? `⭐ ${myShop.rating} (${myShop.review_count} รีวิว)` : "ยังไม่มีรีวิว"}</span>
+            <span>${myShop.is_verified ? "✅ ร้านยืนยันแล้ว" : "ร้านทั่วไป"}</span>
+            <a href="shop.html?id=${myShop.id}" style="color: var(--marigold-light); text-decoration: underline;">
+              ดูหน้าร้านแบบลูกค้าเห็น →</a>
+          </div>
+        </div>
+
+        <div class="tab-bar">
+          <button type="button" class="tab-btn ${activeTab === "products" ? "active" : ""}"
+            onclick="switchTab('products')">สินค้าของฉัน</button>
+          <button type="button" class="tab-btn ${activeTab === "orders" ? "active" : ""}"
+            onclick="switchTab('orders')">คำสั่งซื้อเข้าร้าน</button>
+          <button type="button" class="tab-btn ${activeTab === "settings" ? "active" : ""}"
+            onclick="switchTab('settings')">ตั้งค่าร้าน</button>
+        </div>
+
+        <div id="tab-content"><p class="state-message">กำลังโหลด...</p></div>`;
+
+      renderTabContent();
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      renderDashboard();
+    }
+
+    async function renderTabContent() {
+      if (activeTab === "products") return renderProductsTab();
+      if (activeTab === "orders") return renderOrdersTab();
+      return renderSettingsTab();
+    }
+
+    /* ---------- แท็บสินค้า ---------- */
+    async function renderProductsTab() {
+      const box = document.getElementById("tab-content");
+      let products = [];
+      try {
+        products = await fetchMyProducts();
+      } catch (err) {
+        box.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+
+      const rows = products.length
+        ? products
+            .map(
+              (p) => `
+          <tr>
+            <td><div class="table-thumb">${productThumb(p)}</div></td>
+            <td>
+              <div>${escapeHtml(p.name)}</div>
+              <div class="order-line-meta">${escapeHtml(p.category)}</div>
+            </td>
+            <td>${formatBaht(p.price)}</td>
+            <td>${p.stock === 0 ? '<span style="color: var(--chili-dark)">หมด</span>' : p.stock}</td>
+            <td>${p.sold}</td>
+            <td>${p.is_active ? '<span class="pill-muted">ขายอยู่</span>' : '<span class="status-badge status-CANCELLED">ปิดขาย</span>'}</td>
+            <td style="white-space: nowrap;">
+              <a class="btn-ghost" style="padding: 5px 12px; display: inline-block;"
+                href="product-form.html?id=${p.id}">แก้ไข</a>
+              ${p.is_active
+                ? `<button class="btn-ghost" style="padding: 5px 12px;" onclick="doDelete(${p.id})">ปิดขาย</button>`
+                : ""}
+            </td>
+          </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--muted);">
+             ยังไม่มีสินค้าในร้าน — กด "ลงขายสินค้าใหม่" เพื่อเริ่มขายชิ้นแรก</td></tr>`;
+
+      box.innerHTML = `
+        <div class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">สินค้าของฉัน (${products.length})</h2>
+            <a href="product-form.html" class="btn btn-primary btn-sm">+ ลงขายสินค้าใหม่</a>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th></th><th>ชื่อสินค้า</th><th>ราคา</th><th>คงเหลือ</th>
+                  <th>ขายแล้ว</th><th>สถานะ</th><th></th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    async function doDelete(id) {
+      if (!confirm("ปิดขายสินค้านี้? สินค้าจะไม่แสดงในหน้าร้านอีก (คำสั่งซื้อเก่ายังอยู่ครบ)")) return;
+      try {
+        await deleteProduct(id);
+        showToast("ปิดขายสินค้าแล้ว");
+        renderProductsTab();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    }
+
+    /* ---------- แท็บคำสั่งซื้อ ---------- */
+    async function renderOrdersTab() {
+      const box = document.getElementById("tab-content");
+      let orders = [];
+      try {
+        orders = await fetchSellingOrders();
+      } catch (err) {
+        box.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+
+      if (!orders.length) {
+        box.innerHTML = `<div class="panel"><p class="state-message">
+          ยังไม่มีคำสั่งซื้อเข้ามา — ลองเพิ่มสินค้าและแชร์ลิงก์ร้านให้เพื่อนดูสิ</p></div>`;
+        return;
+      }
+
+      const toShip = orders.filter((o) => o.status === "PAID").length;
+
+      box.innerHTML = `
+        <div class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">คำสั่งซื้อเข้าร้าน (${orders.length})</h2>
+            ${toShip > 0 ? `<span class="status-badge status-PAID">รอจัดส่ง ${toShip} รายการ</span>` : ""}
+          </div>
+          ${orders
+            .map(
+              (o) => `
+            <div class="order-card">
+              <div class="order-head">
+                <div>
+                  <div class="order-shop">ผู้ซื้อ: ${escapeHtml(o.buyer_name)}</div>
+                  <div class="order-number">เลขที่ ${escapeHtml(o.order_number)} · ${formatDate(o.created_at)}</div>
+                </div>
+                <span class="status-badge status-${o.status}">${ORDER_STATUS_LABEL[o.status] || o.status}</span>
+              </div>
+
+              ${o.items
+                .map(
+                  (i) => `
+                <div class="order-line">
+                  <div class="order-line-thumb">${productThumb(i)}</div>
+                  <div class="order-line-info">
+                    <div class="order-line-name">${escapeHtml(i.product_name)}</div>
+                    <div class="order-line-meta">${formatBaht(i.product_price)} × ${i.quantity}</div>
+                  </div>
+                  <div class="cart-item-price">${formatBaht(i.subtotal)}</div>
+                </div>`
+                )
+                .join("")}
+
+              <div class="order-foot">
+                <div>
+                  <div class="order-line-meta">📦 ${escapeHtml(o.recipient_name)} · ${escapeHtml(o.recipient_phone)}</div>
+                  <div class="order-line-meta">${escapeHtml(o.address)}</div>
+                  ${o.note ? `<div class="order-line-meta">📝 ${escapeHtml(o.note)}</div>` : ""}
+                  <div class="order-line-meta">ชำระโดย: ${PAYMENT_LABEL[o.payment_method] || o.payment_method}</div>
+                </div>
+                <div style="text-align: right;">
+                  <div class="order-total-label">ยอดรวม</div>
+                  <div class="order-total-value">${formatBaht(o.total)}</div>
+                </div>
+              </div>
+
+              <div class="order-actions" style="margin-top: 12px; justify-content: flex-end;">
+                ${
+                  o.status === "PAID"
+                    ? `<button class="btn btn-primary btn-sm" onclick="doShip(${o.id})">กดจัดส่งสินค้า</button>
+                       <button class="btn-ghost" onclick="doCancelBySeller(${o.id})">ยกเลิกคำสั่งซื้อ</button>`
+                    : o.status === "PENDING_PAYMENT"
+                    ? `<span class="pill-muted">รอผู้ซื้อชำระเงิน</span>
+                       <button class="btn-ghost" onclick="doCancelBySeller(${o.id})">ยกเลิก</button>`
+                    : ""
+                }
+              </div>
+            </div>`
+            )
+            .join("")}
+        </div>`;
+    }
+
+    async function doShip(id) {
+      try {
+        await shipOrder(id);
+        showToast("อัปเดตเป็นจัดส่งแล้ว");
+        renderOrdersTab();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    }
+
+    async function doCancelBySeller(id) {
+      if (!confirm("ยกเลิกคำสั่งซื้อนี้? ระบบจะคืนสต็อกสินค้าให้อัตโนมัติ")) return;
+      try {
+        await cancelOrder(id);
+        showToast("ยกเลิกคำสั่งซื้อแล้ว");
+        renderOrdersTab();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    }
+
+    /* ---------- แท็บตั้งค่า ---------- */
+    function renderSettingsTab() {
+      document.getElementById("tab-content").innerHTML = `
+        <div class="panel" style="max-width: 520px;">
+          <h2 class="panel-title" style="margin-bottom: 16px;">ตั้งค่าร้าน</h2>
+          <p class="alert alert-error" id="settings-error" style="display:none;"></p>
+          <form id="settings-form">
+            <div class="form-group">
+              <label for="edit-shop-name">ชื่อร้าน</label>
+              <input type="text" id="edit-shop-name" value="${escapeHtml(myShop.name)}" maxlength="60" required />
+            </div>
+            <div class="form-group">
+              <label for="edit-shop-desc">คำโปรยร้าน</label>
+              <textarea id="edit-shop-desc" rows="3">${escapeHtml(myShop.description)}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">บันทึกการเปลี่ยนแปลง</button>
+          </form>
+        </div>`;
+
+      document.getElementById("settings-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const errorEl = document.getElementById("settings-error");
+        errorEl.style.display = "none";
+        try {
+          myShop = await updateMyShop({
+            name: document.getElementById("edit-shop-name").value.trim(),
+            description: document.getElementById("edit-shop-desc").value.trim(),
+          });
+          showToast("บันทึกแล้ว");
+          renderDashboard();
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.style.display = "block";
+        }
+      });
+    }
+
+    loadSeller();
+  </script>
+</body>
+</html>

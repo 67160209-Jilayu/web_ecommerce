@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>หน้าร้านค้า - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <form class="search-bar" id="search-form">
+      <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
+      <button type="submit">ค้นหา</button>
+    </form>
+    <span id="auth-status" data-base="../"></span>
+    <a href="cart.html" class="cart-link">
+      🛍️
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container">
+    <a href="../index.html" class="back-link">← กลับหน้าแรก</a>
+    <div id="shop-body"><p class="state-message">กำลังโหลดข้อมูลร้าน...</p></div>
+  </main>
+
+  <script src="../js/api.js"></script>
+  <script>
+    document.getElementById("search-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = document.getElementById("search-input").value.trim();
+      window.location.href = q ? `../index.html?search=${encodeURIComponent(q)}` : "../index.html";
+    });
+
+    async function loadShop() {
+      const body = document.getElementById("shop-body");
+      const id = parseInt(new URLSearchParams(window.location.search).get("id"), 10);
+      if (!id) {
+        body.innerHTML = `<p class="state-message">ไม่พบร้านค้าที่ต้องการ</p>`;
+        return;
+      }
+
+      let shop, products;
+      try {
+        [shop, products] = await Promise.all([fetchShop(id), fetchShopProducts(id)]);
+      } catch (err) {
+        body.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+
+      body.innerHTML = `
+        <div class="shop-banner">
+          <h1>🏪 ${escapeHtml(shop.name)} ${shop.is_verified ? "✅" : ""}</h1>
+          <p>${escapeHtml(shop.description) || "ร้านนี้ยังไม่ได้ใส่คำโปรย"}</p>
+          <div class="shop-stats">
+            <span>สินค้า ${shop.product_count} รายการ</span>
+            <span>${shop.review_count > 0
+              ? `⭐ ${shop.rating} จาก ${shop.review_count} รีวิว`
+              : "ยังไม่มีรีวิว"}</span>
+          </div>
+        </div>
+
+        <p class="page-title">สินค้าทั้งหมดในร้าน</p>
+        <div class="product-grid">
+          ${
+            products.length
+              ? products
+                  .map(
+                    (p, i) => `
+              <div class="product-card" style="--i:${i}" onclick="location.href='product-detail.html?id=${p.id}'">
+                <div class="product-thumb-wrap">
+                  <div class="product-thumb">${productThumb(p)}</div>
+                  ${p.stock === 0 ? `<div class="badge-out-of-stock">สินค้าหมด</div>` : ""}
+                </div>
+                <div class="product-info">
+                  ${p.free_shipping ? `<span class="badge-free-shipping">ส่งฟรี</span>` : ""}
+                  <div class="product-name">${escapeHtml(p.name)}</div>
+                  <div class="product-price">
+                    ${formatBaht(p.price)}
+                    ${p.original_price ? `<span class="original">${formatBaht(p.original_price)}</span>` : ""}
+                  </div>
+                  <div class="product-meta">
+                    <span>${p.review_count > 0 ? `⭐ ${p.rating}` : "ยังไม่มีรีวิว"}</span>
+                    <span>ขายแล้ว ${p.sold.toLocaleString("th-TH")}</span>
+                  </div>
+                </div>
+              </div>`
+                  )
+                  .join("")
+              : `<p class="state-message">ร้านนี้ยังไม่มีสินค้าวางขาย</p>`
+          }
+        </div>`;
+    }
+
+    loadShop();
+  </script>
+</body>
+</html>

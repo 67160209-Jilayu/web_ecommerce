@@ -4,13 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>เข้าสู่ระบบ - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="../css/style.css" />
 </head>
 <body>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
-    <div style="flex:1;"></div>
-    <span id="auth-status" data-login-href="login.html"></span>
+    <div style="flex: 1"></div>
+    <span id="auth-status" data-base="../"></span>
     <a href="cart.html" class="cart-link">
       🛍️
       <span class="cart-badge" id="cart-badge">0</span>
@@ -25,39 +31,50 @@
       </div>
 
       <form id="login-form">
-        <p class="auth-error" id="login-error" style="display:none;"></p>
+        <p class="auth-error" id="login-error" style="display: none;"></p>
         <div class="form-group">
-          <label>อีเมล</label>
-          <input type="email" id="login-email" required />
+          <label for="login-email">อีเมล</label>
+          <input type="email" id="login-email" required autocomplete="email" />
         </div>
         <div class="form-group">
-          <label>รหัสผ่าน</label>
-          <input type="password" id="login-password" required />
+          <label for="login-password">รหัสผ่าน</label>
+          <input type="password" id="login-password" required autocomplete="current-password" />
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;">เข้าสู่ระบบ</button>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">เข้าสู่ระบบ</button>
       </form>
 
-      <form id="register-form" style="display:none;">
-        <p class="auth-error" id="register-error" style="display:none;"></p>
+      <form id="register-form" style="display: none;">
+        <p class="auth-error" id="register-error" style="display: none;"></p>
         <div class="form-group">
-          <label>ชื่อ</label>
-          <input type="text" id="register-name" required />
+          <label for="register-name">ชื่อที่ใช้แสดง</label>
+          <input type="text" id="register-name" required autocomplete="name" />
         </div>
         <div class="form-group">
-          <label>อีเมล</label>
-          <input type="email" id="register-email" required />
+          <label for="register-email">อีเมล</label>
+          <input type="email" id="register-email" required autocomplete="email" />
         </div>
         <div class="form-group">
-          <label>รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label>
-          <input type="password" id="register-password" required minlength="6" />
+          <label for="register-password">รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label>
+          <input type="password" id="register-password" required minlength="6" autocomplete="new-password" />
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;">สมัครสมาชิก</button>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">สมัครสมาชิก</button>
+        <p class="form-hint" style="text-align: center; margin-top: 12px;">
+          สมัครแล้วเปิดร้านขายของได้ทันที ฟรี ไม่มีค่าธรรมเนียม
+        </p>
       </form>
     </div>
   </main>
 
   <script src="../js/api.js"></script>
   <script>
+    /** หน้าที่ผู้ใช้ตั้งใจจะไปก่อนถูกเด้งมาล็อกอิน (ส่งมาทาง ?next=) */
+    function getNextUrl() {
+      const next = new URLSearchParams(window.location.search).get("next");
+      // รับเฉพาะ path ภายในเว็บเดียวกัน กันการถูกพาไปเว็บอื่น (open redirect)
+      if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+      return "../index.html";
+    }
+
     function switchTab(tab) {
       document.getElementById("login-form").style.display = tab === "login" ? "block" : "none";
       document.getElementById("register-form").style.display = tab === "register" ? "block" : "none";
@@ -69,11 +86,12 @@
       e.preventDefault();
       const errorEl = document.getElementById("login-error");
       errorEl.style.display = "none";
-      const email = document.getElementById("login-email").value.trim();
-      const password = document.getElementById("login-password").value;
       try {
-        await login(email, password);
-        window.location.href = "../index.html";
+        await login(
+          document.getElementById("login-email").value.trim(),
+          document.getElementById("login-password").value
+        );
+        window.location.href = getNextUrl();
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.style.display = "block";
@@ -84,13 +102,12 @@
       e.preventDefault();
       const errorEl = document.getElementById("register-error");
       errorEl.style.display = "none";
-      const name = document.getElementById("register-name").value.trim();
       const email = document.getElementById("register-email").value.trim();
       const password = document.getElementById("register-password").value;
       try {
-        await registerAccount(email, password, name);
+        await registerAccount(email, password, document.getElementById("register-name").value.trim());
         await login(email, password);
-        window.location.href = "../index.html";
+        window.location.href = getNextUrl();
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.style.display = "block";

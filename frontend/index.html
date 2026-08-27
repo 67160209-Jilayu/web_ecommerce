@@ -3,29 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ShopMarket - ค้นหาและสั่งซื้อสินค้า</title>
+  <title>ShopMarket - ตลาดนัดออนไลน์ ซื้อง่าย ขายคล่อง</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="topbar">
     <a href="index.html" class="logo">🛒 ShopMarket</a>
     <form class="search-bar" id="search-form">
-      <input
-        type="text"
-        id="search-input"
-        placeholder="ค้นหาสินค้า เช่น น้ำยาล้างจาน, กระทะ..."
-        autocomplete="off"
-      />
+      <input type="text" id="search-input" placeholder="ค้นหาสินค้า เช่น หม้อหุงข้าว, หูฟัง..." autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
-    <span id="auth-status" data-login-href="pages/login.html"></span>
+    <span id="auth-status" data-base=""></span>
     <a href="pages/cart.html" class="cart-link">
       🛍️
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
+  <section class="hero">
+    <div class="hero-blob"></div>
+    <div class="hero-inner">
+      <span class="hero-kicker">ตลาดนัดออนไลน์ • เปิดทุกวัน 24 ชม.</span>
+      <h1 class="hero-title">ของมันต้องมี<br />ราคามันต้องคุ้ม</h1>
+      <p class="hero-sub">ซื้อของจากร้านค้าที่คัดสรรแล้ว หรือเปิดร้านขายของคุณเองได้ฟรี ไม่มีค่าธรรมเนียม</p>
+    </div>
+  </section>
+
   <main class="container">
+    <div class="category-bar" id="category-bar"></div>
+
+    <form class="filter-bar" id="filter-form">
+      <label for="min-price">ราคา</label>
+      <input type="number" id="min-price" placeholder="ต่ำสุด" min="0" />
+      <span style="color: var(--muted)">–</span>
+      <input type="number" id="max-price" placeholder="สูงสุด" min="0" />
+
+      <label for="sort-select" style="margin-left: 8px">เรียงตาม</label>
+      <select id="sort-select">
+        <option value="latest">ล่าสุด</option>
+        <option value="popular">ขายดี</option>
+        <option value="rating">คะแนนรีวิว</option>
+        <option value="price_asc">ราคาต่ำ → สูง</option>
+        <option value="price_desc">ราคาสูง → ต่ำ</option>
+      </select>
+
+      <button type="submit" class="btn btn-primary btn-sm">กรอง</button>
+      <button type="button" class="btn-ghost" id="reset-filter">ล้างตัวกรอง</button>
+    </form>
+
     <p class="page-title" id="page-title">สินค้าแนะนำสำหรับคุณ</p>
     <div class="product-grid" id="product-grid">
       <p class="state-message">กำลังโหลดสินค้า...</p>
@@ -38,64 +69,120 @@
     const pageTitle = document.getElementById("page-title");
     const searchInput = document.getElementById("search-input");
     const searchForm = document.getElementById("search-form");
+    const categoryBar = document.getElementById("category-bar");
+    const filterForm = document.getElementById("filter-form");
 
-    function getSearchFromUrl() {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("search") || "";
+    /** อ่านเงื่อนไขค้นหาทั้งหมดจาก URL — ทำให้กด back/แชร์ลิงก์แล้วผลลัพธ์เหมือนเดิม */
+    function readParams() {
+      const p = new URLSearchParams(window.location.search);
+      return {
+        search: p.get("search") || "",
+        category_id: p.get("category_id") || "",
+        min_price: p.get("min_price") || "",
+        max_price: p.get("max_price") || "",
+        sort: p.get("sort") || "latest",
+      };
+    }
+
+    function applyParams(next) {
+      const params = { ...readParams(), ...next };
+      const query = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => {
+        if (v && !(k === "sort" && v === "latest")) query.set(k, v);
+      });
+      const qs = query.toString();
+      window.location.href = `index.html${qs ? `?${qs}` : ""}`;
+    }
+
+    async function renderCategories(activeId) {
+      let categories = [];
+      try {
+        categories = await fetchCategories();
+      } catch {
+        return;
+      }
+      const chips = [
+        `<button type="button" class="category-chip ${!activeId ? "active" : ""}"
+            onclick="applyParams({ category_id: '' })">🏷️ ทั้งหมด</button>`,
+        ...categories.map(
+          (c) => `
+          <button type="button" class="category-chip ${
+            String(c.id) === String(activeId) ? "active" : ""
+          }" onclick="applyParams({ category_id: '${c.id}' })">
+            ${c.icon} ${escapeHtml(c.name)}
+          </button>`
+        ),
+      ];
+      categoryBar.innerHTML = chips.join("");
     }
 
     function renderProducts(products) {
       if (products.length === 0) {
-        grid.innerHTML = `<p class="state-message">ไม่พบสินค้าที่ค้นหา ลองคำอื่นดูนะ</p>`;
+        grid.innerHTML = `<p class="state-message">ไม่พบสินค้าตามเงื่อนไขที่เลือก ลองปรับตัวกรองดูนะ</p>`;
         return;
       }
       grid.innerHTML = products
-        .map((p) => {
+        .map((p, i) => {
           const outOfStock = p.stock === 0;
           return `
-          <div class="product-card" onclick="location.href='pages/product-detail.html?id=${p.id}'">
+          <div class="product-card" style="--i:${i}" onclick="location.href='pages/product-detail.html?id=${p.id}'">
             <div class="product-thumb-wrap">
-              <div class="product-thumb">${p.image}</div>
+              <div class="product-thumb">${productThumb(p)}</div>
               ${outOfStock ? `<div class="badge-out-of-stock">สินค้าหมด</div>` : ""}
             </div>
             <div class="product-info">
               ${p.free_shipping ? `<span class="badge-free-shipping">ส่งฟรี</span>` : ""}
-              <div class="product-name">${p.name}</div>
+              <div class="product-name">${escapeHtml(p.name)}</div>
               <div class="product-price">
                 ${formatBaht(p.price)}
                 ${p.original_price ? `<span class="original">${formatBaht(p.original_price)}</span>` : ""}
               </div>
               <div class="product-meta">
-                <span>⭐ ${p.rating}</span>
+                <span>${p.review_count > 0 ? `⭐ ${p.rating}` : "ยังไม่มีรีวิว"}</span>
                 <span>ขายแล้ว ${p.sold.toLocaleString("th-TH")}</span>
               </div>
             </div>
-          </div>
-        `;
+          </div>`;
         })
         .join("");
     }
 
     async function loadProducts() {
-      const search = getSearchFromUrl();
-      searchInput.value = search;
-      pageTitle.textContent = search
-        ? `ผลการค้นหา "${search}"`
+      const params = readParams();
+      searchInput.value = params.search;
+      document.getElementById("min-price").value = params.min_price;
+      document.getElementById("max-price").value = params.max_price;
+      document.getElementById("sort-select").value = params.sort;
+
+      pageTitle.textContent = params.search
+        ? `ผลการค้นหา "${params.search}"`
         : "สินค้าแนะนำสำหรับคุณ";
+
+      renderCategories(params.category_id);
+
       try {
-        const products = await fetchProducts(search);
-        renderProducts(products);
+        renderProducts(await fetchProducts(params));
       } catch (err) {
-        grid.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${err.message}</p>`;
+        grid.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
       }
     }
 
     searchForm.addEventListener("submit", (e) => {
       e.preventDefault();
-      const q = searchInput.value.trim();
-      window.location.href = q
-        ? `index.html?search=${encodeURIComponent(q)}`
-        : "index.html";
+      applyParams({ search: searchInput.value.trim() });
+    });
+
+    filterForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      applyParams({
+        min_price: document.getElementById("min-price").value,
+        max_price: document.getElementById("max-price").value,
+        sort: document.getElementById("sort-select").value,
+      });
+    });
+
+    document.getElementById("reset-filter").addEventListener("click", () => {
+      window.location.href = "index.html";
     });
 
     loadProducts();
