@@ -32,9 +32,28 @@ DATABASE_URL = _normalize_database_url(
 
 SECRET_KEY = os.getenv("SECRET_KEY", DEV_SECRET_KEY)
 
-# โฟลเดอร์เก็บไฟล์ที่ผู้ขายอัปโหลด — ตอน deploy ต้องชี้ไปที่ persistent disk/volume
-# ไม่งั้นไฟล์จะหายทุกครั้งที่ deploy ใหม่ (ดู docs/deployment.md)
+# โฟลเดอร์เก็บไฟล์ที่ผู้ขายอัปโหลด (ใช้เมื่อไม่ได้ตั้งค่า Cloudinary)
+# ตอน deploy ถ้าเก็บลงดิสก์ ต้องชี้ไปที่ persistent disk/volume
+# ไม่งั้นไฟล์จะหายทุกครั้งที่เซิร์ฟเวอร์รีสตาร์ต (ดู docs/deployment.md)
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+
+# ---------- Cloudinary (ที่เก็บรูป/วิดีโอบนคลาวด์) ----------
+# ตั้งค่าอย่างใดอย่างหนึ่ง:
+#   1) CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@<cloud_name>   (ง่ายสุด ตัวแปรเดียว)
+#   2) ตั้งแยกสามตัว: CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET
+# ถ้าไม่ตั้งเลย ระบบจะเขียนไฟล์ลงดิสก์เหมือนเดิม (สะดวกตอนรันในเครื่อง ไม่ต้องต่อเน็ต)
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "").strip()
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip()
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "").strip()
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "").strip()
+
+# โฟลเดอร์บน Cloudinary ที่จะเก็บไฟล์ของโปรเจกต์นี้ (กันปนกับโปรเจกต์อื่นในบัญชีเดียวกัน)
+CLOUDINARY_FOLDER = os.getenv("CLOUDINARY_FOLDER", "shopmarket").strip("/")
+
+USE_CLOUDINARY = bool(
+    CLOUDINARY_URL
+    or (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET)
+)
 
 # โดเมนที่เรียก API ได้ คั่นด้วยคอมมา — "*" = ทุกโดเมน
 # frontend ถูก serve จาก origin เดียวกับ API อยู่แล้ว จึงตั้งให้แคบได้บน production
@@ -57,4 +76,16 @@ def validate() -> None:
             "SECRET_KEY ไม่ปลอดภัยสำหรับ production — ต้องตั้งเป็นค่าสุ่มยาวอย่างน้อย 32 ตัวอักษร\n"
             "สร้างค่าใหม่ด้วย: python3 -c \"import secrets; print(secrets.token_urlsafe(48))\"\n"
             "แล้วนำไปตั้งเป็น environment variable ชื่อ SECRET_KEY ในหน้าตั้งค่าของบริการ deploy"
+        )
+
+    if not USE_CLOUDINARY:
+        # ไม่หยุดแอป เพราะอาจตั้งใจใช้ persistent disk/volume แทน — แต่ต้องเตือนให้เห็นชัด
+        # เพราะถ้าเก็บลงดิสก์ธรรมดาบน Render/Railway ไฟล์จะหายทุกครั้งที่เซิร์ฟเวอร์รีสตาร์ต
+        print(
+            "[คำเตือน] ยังไม่ได้ตั้งค่า Cloudinary — ไฟล์ที่อัปโหลดจะเก็บลงดิสก์ที่ "
+            f"{UPLOAD_DIR}\n"
+            "          ถ้าโฟลเดอร์นี้ไม่ใช่ persistent disk/volume รูปสินค้าจะหายทุกครั้ง"
+            " ที่เซิร์ฟเวอร์รีสตาร์ต\n"
+            "          วิธีตั้งค่า Cloudinary ดูที่ docs/deployment.md",
+            flush=True,
         )

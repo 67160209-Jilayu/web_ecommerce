@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 
-from app import config
+from app import config, storage
 from app.database import create_db_and_tables, engine
 from app.routers import auth, cart, categories, orders, products, reviews, shops, uploads
 from app.seed import seed_if_empty
@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
     config.validate()
 
     config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"[startup] ที่เก็บไฟล์อัปโหลด: {storage.backend_name()}", flush=True)
     create_db_and_tables()
     with Session(engine) as session:
         seed_if_empty(session)
@@ -37,8 +38,15 @@ app.add_middleware(
 
 @app.get("/api/health", tags=["health"])
 def health():
-    """ให้บริการ hosting ใช้เช็คว่าแอปยังมีชีวิตอยู่ (health check)"""
-    return {"status": "ok", "env": config.APP_ENV}
+    """ให้บริการ hosting ใช้เช็คว่าแอปยังมีชีวิตอยู่ (health check)
+
+    บอกที่เก็บไฟล์ที่ใช้อยู่ด้วย จะได้ตรวจได้ทันทีหลัง deploy ว่าตั้งค่า Cloudinary ติดหรือยัง
+    """
+    return {
+        "status": "ok",
+        "env": config.APP_ENV,
+        "storage": storage.backend_name(),
+    }
 
 
 # ต้อง include API router ก่อน mount static เสมอ

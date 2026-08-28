@@ -1,15 +1,15 @@
 """Router อัปโหลดรูป/วิดีโอสินค้า
 
-เก็บไฟล์ลงดิสก์ที่ /app/uploads (map เป็น named volume ใน docker-compose ไม่งั้นหายตอน restart)
-แล้ว serve ผ่าน static path /uploads/<ชื่อไฟล์>
+รับไฟล์ → ตรวจชนิดและขนาด → ส่งให้ app/storage.py เก็บ
+(จะไปอยู่บน Cloudinary หรือดิสก์ ขึ้นกับค่าตั้งค่า router ไม่ต้องรู้)
 """
-import uuid
+import tempfile
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from app import models, schemas
+from app import models, schemas, storage
 from app.routers.auth import get_current_user
-from app.storage import UPLOAD_DIR
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -49,32 +49,36 @@ async def upload_media(
             detail="รองรับเฉพาะรูปภาพ (jpg/png/webp/gif) และวิดีโอ (mp4/webm/mov) เท่านั้น",
         )
 
-    # ตั้งชื่อไฟล์ใหม่ด้วย uuid ทั้งหมด — กันชื่อซ้ำและกัน path traversal จากชื่อไฟล์ที่ผู้ใช้ส่งมา
-    filename = f"{uuid.uuid4().hex}{extension}"
-    dest = UPLOAD_DIR / filename
-
+    # เขียนลงไฟล์ชั่วคราวก่อน เพื่อเช็คขนาดระหว่างรับโดยไม่ต้องโหลดทั้งไฟล์เข้าแรม
+    tmp = tempfile.NamedTemporaryFile(suffix=extension, delete=False)
+    tmp_path = Path(tmp.name)
     written = 0
+
     try:
-        with dest.open("wb") as out:
+        with tmp:
             while chunk := await file.read(CHUNK_SIZE):
                 written += len(chunk)
                 if written > max_bytes:
-                    out.close()
-                    dest.unlink(missing_ok=True)
                     limit_mb = max_bytes // (1024 * 1024)
                     raise HTTPException(
                         status_code=400,
                         detail=f"ไฟล์ใหญ่เกินกำหนด ({media_type} ไม่เกิน {limit_mb}MB)",
                     )
-                out.write(chunk)
+                tmp.write(chunk)
+
+        if written == 0:
+            raise HTTPException(status_code=400, detail="ไฟล์ว่างเปล่า")
+
+        url = storage.save_upload(tmp_path, media_type, extension)
+
     except HTTPException:
+        tmp_path.unlink(missing_ok=True)
         raise
     except Exception:
-        dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="บันทึกไฟล์ไม่สำเร็จ")
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="บันทึกไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
+    finally:
+        # เก็บกวาดไฟล์ชั่วคราวเสมอ (กรณีเก็บลงดิสก์ ไฟล์ถูกย้ายไปแล้ว unlink จะไม่เจอ ซึ่งไม่เป็นไร)
+        tmp_path.unlink(missing_ok=True)
 
-    if written == 0:
-        dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="ไฟล์ว่างเปล่า")
-
-    return schemas.UploadResult(url=f"/uploads/{filename}", media_type=media_type)
+    return schemas.UploadResult(url=url, media_type=media_type)

@@ -232,14 +232,18 @@ def _replace_media(session: Session, product: models.Product, media: list) -> No
     """
     removed_urls = {m.url for m in product.media} - {item.url for item in media}
 
+    # ต้องตัดออกจาก relationship ด้วย ไม่ใช่แค่ session.delete()
+    # ถ้าตัดไม่ครบ collection จะยังถือ object ที่ถูกลบไปแล้วไว้ในหน่วยความจำ
+    # แล้ว session.add(product) ทีหลังจะ cascade ไปโดนมันจน error
     for old in list(product.media):
+        product.media.remove(old)
         session.delete(old)
     session.flush()
 
+    # เพิ่มผ่าน relationship เพื่อให้ collection ในหน่วยความจำตรงกับฐานข้อมูลเสมอ
     for i, item in enumerate(media):
-        session.add(
+        product.media.append(
             models.ProductMedia(
-                product_id=product.id,
                 url=item.url,
                 media_type=item.media_type,
                 sort_order=i,

@@ -20,8 +20,11 @@ services:
         fromDatabase:
           name: shopmarket-db
           property: connectionString
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
+      # ที่เก็บรูป/วิดีโอ — ต้องกรอกค่าเองในหน้า Environment ของ Render เพราะเป็นค่าลับ
+      # เอามาจากหน้า Dashboard ของ cloudinary.com (ดูขั้นตอนใน docs/deployment.md)
+      # ถ้าไม่ตั้งค่านี้ ไฟล์จะเก็บลงดิสก์ของ container และหายทุกครั้งที่เซิร์ฟเวอร์รีสตาร์ต
+      - key: CLOUDINARY_URL
+        sync: false
 
 databases:
   - name: shopmarket-db
