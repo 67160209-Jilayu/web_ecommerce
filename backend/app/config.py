@@ -42,10 +42,26 @@ UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 #   1) CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@<cloud_name>   (ง่ายสุด ตัวแปรเดียว)
 #   2) ตั้งแยกสามตัว: CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET
 # ถ้าไม่ตั้งเลย ระบบจะเขียนไฟล์ลงดิสก์เหมือนเดิม (สะดวกตอนรันในเครื่อง ไม่ต้องต่อเน็ต)
-CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "").strip()
-CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip()
-CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "").strip()
-CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "").strip()
+def _clean_cloudinary_url(raw: str) -> str:
+    """ทำความสะอาดค่าที่คนกรอกมา เพราะพลาดกันบ่อยมาก 3 แบบ
+
+    1. คัดลอกทั้งบรรทัดจาก Dashboard มา จะติด "CLOUDINARY_URL=" นำหน้ามาด้วย
+    2. แทนที่ตัวอย่าง <api_key> แล้วลืมลบวงเล็บมุม < > ออก
+    3. ติดเครื่องหมายคำพูดหรือช่องว่างหัวท้าย
+
+    ทั้งสามแบบ SDK จะรับไปเงียบๆ แล้วไปพังตอนอัปโหลดจริงเป็น 401 ซึ่งหาสาเหตุยาก
+    จึงเก็บกวาดให้ตรงนี้เลย
+    """
+    value = raw.strip().strip('"').strip("'").strip()
+    if value.upper().startswith("CLOUDINARY_URL="):
+        value = value.split("=", 1)[1].strip()
+    return value.replace("<", "").replace(">", "").strip()
+
+
+CLOUDINARY_URL = _clean_cloudinary_url(os.getenv("CLOUDINARY_URL", ""))
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip().strip("<>")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "").strip().strip("<>")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "").strip().strip("<>")
 
 # โฟลเดอร์บน Cloudinary ที่จะเก็บไฟล์ของโปรเจกต์นี้ (กันปนกับโปรเจกต์อื่นในบัญชีเดียวกัน)
 CLOUDINARY_FOLDER = os.getenv("CLOUDINARY_FOLDER", "shopmarket").strip("/")
@@ -54,6 +70,31 @@ USE_CLOUDINARY = bool(
     CLOUDINARY_URL
     or (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET)
 )
+
+
+def cloudinary_diagnosis() -> str:
+    """บอกเหตุผลว่าทำไมถึงใช้/ไม่ใช้ Cloudinary — ไม่เปิดเผยค่าลับใดๆ
+
+    ใช้แสดงในหน้า /api/health เพื่อให้ตรวจปัญหาตอน deploy ได้เองโดยไม่ต้องเปิดดู log
+    """
+    if CLOUDINARY_URL:
+        if not CLOUDINARY_URL.startswith("cloudinary://"):
+            return "ค่า CLOUDINARY_URL ผิดรูปแบบ (ต้องขึ้นต้นด้วย cloudinary://)"
+        if "@" not in CLOUDINARY_URL or ":" not in CLOUDINARY_URL.split("//", 1)[-1]:
+            return "ค่า CLOUDINARY_URL ไม่ครบส่วน (ต้องเป็น cloudinary://api_key:api_secret@cloud_name)"
+        return "ตั้งค่าจาก CLOUDINARY_URL"
+
+    partial = [
+        name for name, value in (
+            ("CLOUDINARY_CLOUD_NAME", CLOUDINARY_CLOUD_NAME),
+            ("CLOUDINARY_API_KEY", CLOUDINARY_API_KEY),
+            ("CLOUDINARY_API_SECRET", CLOUDINARY_API_SECRET),
+        ) if not value
+    ]
+    if len(partial) < 3:
+        return "ตั้งค่าไม่ครบ ยังขาด: " + ", ".join(partial)
+
+    return "ยังไม่ได้ตั้งค่า CLOUDINARY_URL ในหน้า Environment ของบริการ deploy"
 
 # โดเมนที่เรียก API ได้ คั่นด้วยคอมมา — "*" = ทุกโดเมน
 # frontend ถูก serve จาก origin เดียวกับ API อยู่แล้ว จึงตั้งให้แคบได้บน production

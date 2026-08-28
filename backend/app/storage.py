@@ -14,6 +14,7 @@ import shutil
 import uuid
 from pathlib import Path
 from typing import Iterable, Optional
+from urllib.parse import unquote, urlparse
 
 from app import config
 
@@ -30,6 +31,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 _cloudinary = None
 _cloudinary_uploader = None
 _cloudinary_ready = False
+_init_error = None
 
 if config.USE_CLOUDINARY:
     try:
@@ -37,8 +39,17 @@ if config.USE_CLOUDINARY:
         import cloudinary.uploader as _cl_uploader
 
         if config.CLOUDINARY_URL:
-            # SDK อ่านค่าจาก environment variable CLOUDINARY_URL ให้เอง
-            _cl.config(secure=True)
+            # แยกค่าเองแล้วส่งให้ SDK ตรงๆ — ห้ามปล่อยให้ SDK ไปอ่าน environment variable เอง
+            # เพราะค่าดิบอาจมีวงเล็บมุมหรือคำนำหน้าติดมา (ที่ config.py ทำความสะอาดไว้แล้ว)
+            # ถ้าปล่อยให้ SDK อ่านเอง การทำความสะอาดจะไม่มีผล แล้วไปพังตอนอัปโหลดเป็น 401
+            parsed = urlparse(config.CLOUDINARY_URL)
+            cloud_name = parsed.netloc.rsplit("@", 1)[-1]
+            _cl.config(
+                cloud_name=cloud_name,
+                api_key=unquote(parsed.username or ""),
+                api_secret=unquote(parsed.password or ""),
+                secure=True,
+            )
         else:
             _cl.config(
                 cloud_name=config.CLOUDINARY_CLOUD_NAME,
@@ -50,6 +61,7 @@ if config.USE_CLOUDINARY:
         _cloudinary_uploader = _cl_uploader
         _cloudinary_ready = True
     except Exception as err:  # ไลบรารีไม่มีหรือค่าตั้งค่าผิด
+        _init_error = str(err)
         print(f"[คำเตือน] ตั้งค่า Cloudinary ไม่สำเร็จ ({err}) — จะเก็บไฟล์ลงดิสก์แทน", flush=True)
 
 
@@ -154,7 +166,11 @@ def delete_files(urls: Iterable[str]) -> int:
                 continue      # ไม่มีการตั้งค่า Cloudinary แล้ว ลบไม่ได้ ปล่อยไว้
             public_id, resource_type = ref
             try:
-                _cloudinary_uploader.destroy(public_id, resource_type=resource_type)
+                # invalidate=True สั่งล้าง cache ที่ CDN ด้วย ไม่งั้น URL เดิมจะยังเปิดได้
+                # อีกสักพักทั้งที่ไฟล์ถูกลบจากที่เก็บไปแล้ว
+                _cloudinary_uploader.destroy(
+                    public_id, resource_type=resource_type, invalidate=True
+                )
                 removed += 1
             except Exception:
                 pass

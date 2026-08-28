@@ -3,6 +3,7 @@
 รับไฟล์ → ตรวจชนิดและขนาด → ส่งให้ app/storage.py เก็บ
 (จะไปอยู่บน Cloudinary หรือดิสก์ ขึ้นกับค่าตั้งค่า router ไม่ต้องรู้)
 """
+import logging
 import tempfile
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from app import models, schemas, storage
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
+
+logger = logging.getLogger(__name__)
 
 # ตรวจจาก content-type จริงที่เบราว์เซอร์ส่งมา ไม่เชื่อนามสกุลไฟล์ (กันไฟล์ปลอมนามสกุล)
 IMAGE_TYPES = {
@@ -75,6 +78,9 @@ async def upload_media(
         tmp_path.unlink(missing_ok=True)
         raise
     except Exception:
+        # ต้อง log ต้นเหตุจริงไว้เสมอ ไม่งั้นเวลาขึ้น production แล้วอัปโหลดพัง
+        # จะเห็นแค่ข้อความกลางๆ หาสาเหตุไม่ได้เลย (ผู้ใช้ยังเห็นข้อความสุภาพเหมือนเดิม)
+        logger.exception("อัปโหลดไฟล์ไม่สำเร็จ")
         tmp_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail="บันทึกไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
     finally:

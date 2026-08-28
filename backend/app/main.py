@@ -19,7 +19,11 @@ async def lifespan(app: FastAPI):
     config.validate()
 
     config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[startup] ที่เก็บไฟล์อัปโหลด: {storage.backend_name()}", flush=True)
+    print(
+        f"[startup] ที่เก็บไฟล์อัปโหลด: {storage.backend_name()} "
+        f"({config.cloudinary_diagnosis()})",
+        flush=True,
+    )
     create_db_and_tables()
     with Session(engine) as session:
         seed_if_empty(session)
@@ -46,6 +50,9 @@ def health():
         "status": "ok",
         "env": config.APP_ENV,
         "storage": storage.backend_name(),
+        # บอกเหตุผลว่าทำไมถึงได้ที่เก็บนี้ ช่วยหาสาเหตุตอน deploy โดยไม่ต้องเปิด log
+        # (เป็นข้อความอธิบายเท่านั้น ไม่มีค่าลับใดๆ)
+        "storage_detail": config.cloudinary_diagnosis(),
     }
 
 
