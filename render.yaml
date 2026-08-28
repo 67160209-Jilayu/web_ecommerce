@@ -24,7 +24,7 @@ services:
       # เอามาจากหน้า Dashboard ของ cloudinary.com (ดูขั้นตอนใน docs/deployment.md)
       # ถ้าไม่ตั้งค่านี้ ไฟล์จะเก็บลงดิสก์ของ container และหายทุกครั้งที่เซิร์ฟเวอร์รีสตาร์ต
       - key: CLOUDINARY_URL
-        sync: false
+        sync: true
 
 databases:
   - name: shopmarket-db
