@@ -148,7 +148,7 @@ render.yaml                         Blueprint สร้างเว็บ+ฐา
 > อ้างตัวแปร CSS ไม่มีค่าสีเขียนซ้ำกระจายในไฟล์
 
 ### สัปดาห์ 5 — Marketplace เต็มรูปแบบ (โพสขายได้ + ซื้อได้ + อัปโหลดสื่อ)
-> ยกระดับเป็น marketplace แบบ Shopee ที่ผู้ใช้คนเดียวกันเป็นได้ทั้งผู้ซื้อและผู้ขาย:
+> ยกระดับเป็น marketplace ที่ผู้ใช้คนเดียวกันเป็นได้ทั้งผู้ซื้อและผู้ขาย:
 > ผูก Shop กับ User (1 คน 1 ร้าน), เพิ่มตาราง Category / ProductMedia / Order / OrderItem / Review,
 > ทำ endpoint อัปโหลดรูปและวิดีโอเก็บลง Docker volume, ระบบ checkout ที่แยก 1 ออเดอร์ต่อ 1 ร้าน
 > พร้อมตัด stock แบบล็อก row, ชำระเงิน mock 3 ช่องทาง (ปลายทาง/โอน/บัตร), วงจรสถานะออเดอร์
@@ -158,4 +158,4 @@ render.yaml                         Blueprint สร้างเว็บ+ฐา
 
 
 ## Deploy URL
-_ยังไม่ deploy — ใส่ลิงก์ตรงนี้หลัง deploy เสร็จ (ดูขั้นตอนใน [docs/deployment.md](docs/deployment.md))_
+https://shopmarket-8dp6.onrender.com/
