@@ -156,13 +156,6 @@ render.yaml                         Blueprint สร้างเว็บ+ฐา
 > สินค้าที่ซื้อจริงและได้รับแล้วเท่านั้น พร้อมหน้าเว็บใหม่: checkout, orders, seller dashboard,
 > product form, หน้าร้าน — ใช้ design system เดิมที่มีอยู่แล้วต่อยอด ไม่รื้อใหม่
 
-## Roadmap ถัดไป
-- ระบบ migration (Alembic) เพื่อไม่ต้อง `down -v` ทุกครั้งที่แก้ schema
-- Pagination ของ `GET /products` (ตอนนี้คืนสินค้าทั้งหมดในครั้งเดียว)
-- ย้ายไฟล์อัปโหลดไป object storage (Cloudinary/S3) แทนดิสก์ของเซิร์ฟเวอร์
-  — ดูเหตุผลและทางเลือกใน [docs/deployment.md](docs/deployment.md)
-- ค้นหาแบบ full-text index ฝั่ง DB (ตอนนี้กรองคำค้นในหน่วยความจำ)
-- แจ้งเตือนเมื่อสถานะพัสดุเปลี่ยน (ตาม Acceptance Criteria ในเอกสาร User Journey)
 
 ## Deploy URL
 _ยังไม่ deploy — ใส่ลิงก์ตรงนี้หลัง deploy เสร็จ (ดูขั้นตอนใน [docs/deployment.md](docs/deployment.md))_
