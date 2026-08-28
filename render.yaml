@@ -22,12 +22,6 @@ services:
           property: connectionString
       - key: UPLOAD_DIR
         value: /var/data/uploads
-    # หมายเหตุ: disk ต้องใช้แพ็กเกจแบบเสียเงิน ถ้าใช้ free plan ให้ลบ 4 บรรทัดนี้ออก
-    # แล้วยอมรับว่าไฟล์ที่อัปโหลดจะหายทุกครั้งที่ deploy ใหม่ (ดูทางเลือกใน docs/deployment.md)
-    disk:
-      name: uploads
-      mountPath: /var/data/uploads
-      sizeGB: 1
 
 databases:
   - name: shopmarket-db
