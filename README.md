@@ -2,12 +2,7 @@
 67160207 กิตติพศ ระบาย
 # ShopMarket — Marketplace ซื้อ-ขายออนไลน์
 
-โปรเจกต์จาก User Journey ข้อ 2 (อีคอมเมิร์ซ) ทำตามแนวทาง "จาก User Journey สู่โค้ดจริงด้วย AI"
 
-**สถานะ: marketplace ครบวงจร พร้อม deploy** — ผู้ใช้คนเดียวกันเป็นได้ทั้งผู้ซื้อและผู้ขาย
-เปิดร้าน → ลงขายสินค้าพร้อมอัปโหลดรูป/วิดีโอ → ลูกค้าสั่งซื้อ ชำระเงิน ติดตามสถานะ และรีวิวได้จริง
-
-📘 **จะ deploy ขึ้นอินเทอร์เน็ต ดูขั้นตอนทั้งหมดที่ [docs/deployment.md](docs/deployment.md)**
 
 ## Tech Stack
 - Backend: FastAPI (Python) + SQLModel
@@ -92,6 +87,7 @@ docs/user-journey.md                User Journey ที่ใช้อ้าง�
 docs/er-diagram.md                  โครงสร้างตาราง + เหตุผลการออกแบบ + flow สถานะออเดอร์
 docs/api-spec.md                    รายการ API endpoint ทั้งหมด
 docs/deployment.md                  คู่มือ deploy ขึ้น Render/Railway ทีละขั้น
+docs/presentation.docx              เอกสารนำเสนอ: โครงสไลด์ 11 แผ่น + สคริปต์พูด + คำถาม-คำตอบ
 render.yaml                         Blueprint สร้างเว็บ+ฐานข้อมูลบน Render ในคลิกเดียว
 ```
 
