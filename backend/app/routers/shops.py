@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from app import crud, models, schemas
+from app import crud, dashboard, models, schemas
 from app.database import get_session
 from app.routers.auth import get_current_user
 
@@ -105,3 +105,12 @@ def update_my_shipping(
         return crud.update_shop_shipping(session, shop, data)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
+
+
+@router.get("/me/dashboard", response_model=schemas.SellerDashboard)
+def my_dashboard(
+    shop: models.Shop = Depends(require_own_shop),
+    session: Session = Depends(get_session),
+):
+    """สรุปยอดขายของร้านตัวเอง — ยอดขาย งานที่ต้องทำ ของขายดี ของใกล้หมด"""
+    return dashboard.build(session, shop)

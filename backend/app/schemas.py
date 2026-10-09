@@ -528,3 +528,54 @@ class Features(SQLModel):
     llm_provider: str           # gemini | fake | none
     chat: bool = False
     chat_rollout_percent: int = 0
+
+
+# =====================================================================
+# แดชบอร์ดร้านค้า
+# =====================================================================
+
+class DashboardTodo(SQLModel):
+    """งานที่ร้านต้องลงมือทำ เช่น ออเดอร์ที่รอจัดส่ง"""
+    status: str
+    label: str
+    count: int
+
+
+class DashboardDay(SQLModel):
+    """ยอดขายของหนึ่งวัน (ใช้วาดกราฟแท่ง 7 วันล่าสุด)"""
+    date: str
+    revenue: int
+    orders: int
+
+
+class DashboardProduct(SQLModel):
+    product_id: int
+    name: str
+    image: str = "📦"
+    cover_url: Optional[str] = None
+    quantity: int
+    revenue: int
+
+
+class DashboardStock(SQLModel):
+    product_id: int
+    name: str
+    image: str = "📦"
+    cover_url: Optional[str] = None
+    stock: int
+
+
+class SellerDashboard(SQLModel):
+    revenue_total: int
+    revenue_30d: int
+    revenue_change_pct: Optional[float] = None   # เทียบกับ 30 วันก่อนหน้า (None = ไม่มีฐานเทียบ)
+    order_count: int
+    avg_order_value: int
+    cancelled_count: int
+    rating: float
+    review_count: int
+    active_product_count: int
+    todo: list[DashboardTodo] = []
+    trend: list[DashboardDay] = []
+    top_products: list[DashboardProduct] = []
+    low_stock: list[DashboardStock] = []

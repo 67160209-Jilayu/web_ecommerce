@@ -482,12 +482,12 @@ function starsHtml(rating) {
 }
 
 /* ============================================================
-   ถาดเปรียบเทียบ (เฟส 2) — แถบลอยด้านล่างทุกหน้า
+   แผงเปรียบเทียบ — ติดขอบขวาของจอ เทียบทีละ 2 ชิ้นเฉพาะหมวดเดียวกัน
    จำไว้ใน localStorage (guest ก็ใช้ได้) + บันทึกเข้าบัญชีเมื่อล็อกอิน
    ============================================================ */
 
 const COMPARE_KEY = "shopmarket_compare_items";
-const COMPARE_MAX = 4;
+const COMPARE_MAX = 2;   // เทียบทีละ 2 ชิ้นก็พอ อ่านง่ายกว่าตารางยาวๆ
 const PROVINCE_KEY = "shopmarket_province";
 // ข้อมูลย่อของสินค้าที่เห็นบนหน้านี้ ใช้แสดงในถาดโดยไม่ต้องเรียก API ซ้ำ
 const _compareSeen = {};
@@ -506,6 +506,7 @@ const fetchCompareList = () => apiFetch("/account/compare-list");
 const saveCompareList = (ids) =>
   apiFetch("/account/compare-list", { method: "PUT", body: JSON.stringify({ ids }) });
 const fetchMyShipping = () => apiFetch("/shops/me/shipping");
+const fetchMyDashboard = () => apiFetch("/shops/me/dashboard");
 const saveMyShipping = (data) =>
   apiFetch("/shops/me/shipping", { method: "PUT", body: JSON.stringify(data) });
 const fetchSpecSuggestions = (id) => apiFetch(`/products/${id}/spec-suggestions`);
@@ -581,7 +582,7 @@ function compareButtonHtml(p, extraClass = "") {
   _compareSeen[lite.id] = lite;
   const on = isInCompare(lite.id);
   return `<button type="button" class="compare-btn ${on ? "on" : ""} ${extraClass}" data-compare-id="${lite.id}"
-    title="เพิ่มเข้าถาดเพื่อเปรียบเทียบกับสินค้าอื่น (สูงสุด ${COMPARE_MAX} ชิ้น)"
+    title="เลือกไว้เทียบกับสินค้าที่คล้ายกัน (เทียบทีละ ${COMPARE_MAX} ชิ้น)"
     aria-pressed="${on}" onclick="event.stopPropagation(); toggleCompare(${lite.id})">${on ? "✓ เลือกเทียบแล้ว" : "+ เทียบ"}</button>`;
 }
 
@@ -598,11 +599,13 @@ function addToCompare(p) {
   const items = getCompareItems();
   if (items.some((x) => x.id === lite.id)) return true;
   if (items.length >= COMPARE_MAX) {
-    showToast(`เทียบได้สูงสุด ${COMPARE_MAX} ชิ้น — เอาบางชิ้นออกจากถาดก่อน`, "error");
+    showToast(`เทียบได้ทีละ ${COMPARE_MAX} ชิ้น — เอาชิ้นเดิมออกก่อนถึงจะเลือกใหม่ได้`, "error");
     return false;
   }
+  // เทียบได้เฉพาะของที่คล้ายกัน (หมวดเดียวกัน) — เทียบเสื้อกับหม้อหุงข้าวไม่ได้ช่วยให้ตัดสินใจ
   if (items.length && lite.category_id && items[0].category_id && items[0].category_id !== lite.category_id) {
-    showToast("สินค้าต่างหมวด จะเทียบได้แค่ราคา รีวิว และค่าส่ง");
+    showToast("เทียบได้เฉพาะสินค้าหมวดเดียวกัน ลองเลือกของที่คล้ายกับชิ้นแรก", "error");
+    return false;
   }
   setCompareItems([...items, lite]);
   return true;
@@ -631,66 +634,134 @@ function compareUrl(ids) {
   return `${pageBase()}pages/compare.html?ids=${ids.join(",")}`;
 }
 
-let _trayExpanded = false; // มือถือ: ถาดย่อเป็นแถบเดียว กดเพื่อกาง
+let _panelOpen = true;        // มือถือ: ย่อเหลือแถบเล็กได้
+let _similarCache = {};       // id สินค้าชิ้นแรก -> รายการของคล้ายกัน (กันยิง API ซ้ำ)
 
+/** ดึงของที่คล้ายกับชิ้นที่เลือกไว้ มาเสนอให้กดเลือกเป็นชิ้นที่ 2 */
+async function loadSimilarForPanel(productId) {
+  if (_similarCache[productId]) return _similarCache[productId];
+  try {
+    const list = await fetchSimilar(productId, 4);
+    _similarCache[productId] = list.map(compareLite);
+  } catch {
+    _similarCache[productId] = [];
+  }
+  _similarCache[productId].forEach((x) => (_compareSeen[x.id] = x));
+  return _similarCache[productId];
+}
+
+/** แผงเทียบสินค้า — ติดขอบขวาของจอ ไม่บังเนื้อหาด้านล่าง */
 function renderCompareTray() {
   // หน้าเทียบมีตารางอยู่แล้ว / หน้าตะกร้า-ชำระเงิน-ล็อกอิน ต้องไม่มีอะไรมาบังปุ่มหลัก
   if (/\/(compare|cart|checkout|login)\.html$/.test(window.location.pathname)) return;
-  let tray = document.getElementById("compare-tray");
+  let panel = document.getElementById("compare-tray");
   const items = getCompareItems();
+
   if (!items.length) {
-    tray?.remove();
+    panel?.remove();
     document.body.classList.remove("has-compare-tray");
-    _trayExpanded = false;
+    _panelOpen = true;
     return;
   }
-  if (!tray) {
-    tray = document.createElement("div");
-    tray.id = "compare-tray";
-    tray.className = "compare-tray";
-    tray.setAttribute("role", "region");
-    tray.setAttribute("aria-label", "ถาดเปรียบเทียบสินค้า");
-    document.body.appendChild(tray);
+
+  if (!panel) {
+    panel = document.createElement("aside");
+    panel.id = "compare-tray";
+    panel.className = "compare-panel";
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-label", "สินค้าที่เลือกไว้เปรียบเทียบ");
+    document.body.appendChild(panel);
   }
-  tray.classList.toggle("expanded", _trayExpanded);
+  panel.classList.toggle("collapsed", !_panelOpen);
   document.body.classList.add("has-compare-tray");
+
   const slots = Array.from({ length: COMPARE_MAX }, (_, i) => items[i]);
-  const goBtn =
-    items.length >= 2
-      ? `<a class="btn btn-primary btn-sm" href="${compareUrl(items.map((x) => x.id))}">เปรียบเทียบ ${items.length} ชิ้น</a>`
-      : `<span class="compare-hint">เลือกสินค้าอีกอย่างน้อย 1 ชิ้นเพื่อเทียบ</span>`;
-  tray.innerHTML = `
-    <button type="button" class="compare-tray-toggle" aria-expanded="${_trayExpanded}" aria-controls="compare-tray-body"
-      onclick="toggleCompareTray()">
-      <span>⚖️ เลือกเทียบไว้ ${items.length} ชิ้น</span>
-      <span class="compare-tray-toggle-hint">${_trayExpanded ? "ย่อ ▾" : "ดู/เทียบ ▴"}</span>
+  const ready = items.length >= COMPARE_MAX;
+
+  panel.innerHTML = `
+    <button type="button" class="compare-panel-toggle" aria-expanded="${_panelOpen}"
+      aria-controls="compare-panel-body" onclick="toggleCompareTray()">
+      <span class="compare-panel-title">⚖️ เทียบสินค้า</span>
+      <span class="compare-panel-count">${items.length}/${COMPARE_MAX}</span>
+      <span class="compare-panel-caret" aria-hidden="true">${_panelOpen ? "▸" : "◂"}</span>
     </button>
-    <div class="compare-tray-body" id="compare-tray-body">
-      <ul class="compare-tray-items" aria-label="สินค้าที่เลือกเทียบ">
+
+    <div class="compare-panel-body" id="compare-panel-body">
+      <ul class="compare-panel-slots" aria-label="ช่องเปรียบเทียบ">
         ${slots
-          .map((it) =>
+          .map((it, i) =>
             it
               ? `<li class="compare-slot">
                    <div class="compare-slot-thumb">${productThumb(it)}</div>
                    <span class="compare-slot-name">${escapeHtml(it.name)}</span>
-                   <button type="button" class="compare-slot-remove" aria-label="เอา ${escapeHtml(it.name)} ออกจากถาดเทียบ"
-                     onclick="removeFromCompare(${it.id})"><span aria-hidden="true">✕</span><span class="compare-slot-remove-text">เอาออก</span></button>
+                   <button type="button" class="compare-slot-remove"
+                     aria-label="เอา ${escapeHtml(it.name)} ออกจากการเทียบ"
+                     onclick="removeFromCompare(${it.id})">
+                     <span aria-hidden="true">✕</span><span class="compare-slot-remove-text">เอาออก</span>
+                   </button>
                  </li>`
-              : `<li class="compare-slot empty" aria-hidden="true">ว่าง</li>`
+              : `<li class="compare-slot empty">
+                   <span class="compare-slot-num">${i + 1}</span>
+                   <span class="compare-slot-empty-text">เลือกอีก 1 ชิ้น</span>
+                 </li>`
           )
           .join("")}
       </ul>
-      <div class="compare-tray-actions">
-        <button type="button" class="btn-ghost compare-clear" onclick="clearCompareWithUndo()">ล้างทั้งหมด</button>
-        ${goBtn}
+
+      <div class="compare-suggest" id="compare-suggest" ${ready ? "hidden" : ""}>
+        <p class="compare-suggest-title">ของที่คล้ายกัน — กดเพื่อเลือกเทียบ</p>
+        <div class="compare-suggest-list" id="compare-suggest-list">
+          <p class="compare-suggest-loading">กำลังหาของที่คล้ายกัน...</p>
+        </div>
+      </div>
+
+      <div class="compare-panel-actions">
+        <button type="button" class="btn-ghost compare-clear" onclick="clearCompareWithUndo()">ล้าง</button>
+        ${
+          ready
+            ? `<a class="btn btn-primary btn-sm" href="${compareUrl(items.map((x) => x.id))}">ดูตารางเทียบ</a>`
+            : `<span class="compare-hint">เลือกครบ ${COMPARE_MAX} ชิ้นแล้วจะเทียบได้</span>`
+        }
       </div>
     </div>`;
+
+  if (!ready) renderSimilarSuggestions(items[0].id);
+}
+
+/** เติมรายการของคล้ายกันลงในแผง (ช่องสีฟ้าที่กดเลือกได้) */
+async function renderSimilarSuggestions(seedId) {
+  const box = document.getElementById("compare-suggest-list");
+  if (!box) return;
+  const list = (await loadSimilarForPanel(seedId)).filter((x) => !isInCompare(x.id));
+  const target = document.getElementById("compare-suggest-list");
+  if (!target) return;   // ผู้ใช้เปลี่ยนหน้า/เลือกเพิ่มระหว่างรอ
+
+  if (!list.length) {
+    target.innerHTML = `<p class="compare-suggest-empty">ยังไม่มีสินค้าคล้ายกันให้เทียบ
+      ลองเปิดหน้าสินค้าอื่นในหมวดเดียวกันแล้วกดปุ่มเทียบ</p>`;
+    return;
+  }
+  target.innerHTML = list
+    .map(
+      (x) => `
+      <button type="button" class="compare-suggest-item" onclick="pickSuggested(${x.id})"
+        aria-label="เลือก ${escapeHtml(x.name)} มาเทียบ">
+        <span class="compare-suggest-thumb">${productThumb(x)}</span>
+        <span class="compare-suggest-name">${escapeHtml(x.name)}</span>
+      </button>`
+    )
+    .join("");
+}
+
+/** กดเลือกของที่ระบบเสนอให้เทียบ */
+function pickSuggested(id) {
+  if (_compareSeen[id]) addToCompare(_compareSeen[id]);
 }
 
 function toggleCompareTray() {
-  _trayExpanded = !_trayExpanded;
+  _panelOpen = !_panelOpen;
   renderCompareTray();
-  document.querySelector(".compare-tray-toggle")?.focus();
+  document.querySelector(".compare-panel-toggle")?.focus();
 }
 
 /** ล็อกอินแล้วและเครื่องนี้ยังไม่มีรายการ → ดึงถาดที่บันทึกไว้ในบัญชีมาใช้ */
