@@ -439,3 +439,25 @@ class ChatCache(SQLModel, table=True):
     query_hash: str = Field(primary_key=True)
     response_json: str
     expires_at: datetime
+
+
+# ---------- ดัชนี (index) ที่ PostgreSQL ไม่สร้างให้อัตโนมัติจาก foreign key ----------
+# รายการเดียวใช้ทั้ง 2 ทาง: create_all (DB ใหม่ — ผ่าน Index ด้านล่าง) และ
+# database.ensure_schema (DB เก่าบน Render — CREATE INDEX IF NOT EXISTS ชื่อเดียวกัน)
+# ชื่อคงที่ ห้ามเปลี่ยน ไม่งั้นจะสร้างซ้ำ
+# (ชื่อตาราง, ชื่อดัชนี, [คอลัมน์...])
+EXTRA_INDEXES = [
+    ("product", "ix_product_shop_id", ["shop_id"]),
+    ("product", "ix_product_category_id", ["category_id"]),
+    ("product", "ix_product_is_active_category_id", ["is_active", "category_id"]),
+    ("productmedia", "ix_productmedia_product_id", ["product_id"]),
+    ("cart", "ix_cart_user_id", ["user_id"]),
+    ("cartitem", "ix_cartitem_cart_id", ["cart_id"]),
+    ("cartitem", "ix_cartitem_product_id", ["product_id"]),
+    ("orderitem", "ix_orderitem_order_id", ["order_id"]),
+    ("orderitem", "ix_orderitem_product_id", ["product_id"]),
+]
+
+for _table, _name, _cols in EXTRA_INDEXES:
+    _t = SQLModel.metadata.tables[_table]
+    Index(_name, *[_t.c[c] for c in _cols])

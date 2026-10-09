@@ -60,6 +60,22 @@ def ensure_schema() -> None:
             stmt = f"ALTER TABLE {quoted} ADD COLUMN IF NOT EXISTS {column} {sql_type}"
         with engine.begin() as conn:
             conn.execute(text(stmt))
+    ensure_indexes()
+
+
+def ensure_indexes() -> None:
+    """สร้างดัชนีให้ตารางที่มีอยู่แล้วใน DB เก่า (create_all ไม่เพิ่มดัชนีให้ตารางเดิม)
+
+    PostgreSQL ไม่สร้างดัชนีให้ foreign key เอง → query ที่ join/กรองด้วย shop_id, category_id, cart_id ฯลฯ
+    จะ scan ทั้งตาราง เมื่อข้อมูลโตขึ้น
+    CREATE INDEX IF NOT EXISTS ใช้ได้ทั้ง SQLite และ PostgreSQL และรันซ้ำทุก startup ได้ปลอดภัย
+    (ไม่ใช้ extension ใดๆ)
+    """
+    from app.models import EXTRA_INDEXES
+
+    with engine.begin() as conn:
+        for table, name, cols in EXTRA_INDEXES:
+            conn.execute(text(f'CREATE INDEX IF NOT EXISTS {name} ON "{table}" ({", ".join(cols)})'))
 
 
 def get_session():
