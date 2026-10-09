@@ -1,5 +1,5 @@
 """รูปแบบข้อมูลรับ-ส่งผ่าน API (แยกจาก models.py ที่เป็นโครงสร้างตารางจริง)"""
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from pydantic import field_validator
@@ -65,9 +65,41 @@ class MediaItem(SQLModel):
     media_type: str = "image"   # image | video
 
 
+class AttributeValueIn(SQLModel):
+    key: str
+    value_num: Optional[float] = None
+    value_text: Optional[str] = None
+
+
+class AttributeValueRead(SQLModel):
+    key: str
+    name_th: str
+    unit: Optional[str] = None
+    group_name: str
+    data_type: str
+    value_num: Optional[float] = None
+    value_text: Optional[str] = None
+    display: Optional[str] = None
+    source: str
+
+
+class AttributeTemplateRead(SQLModel):
+    key: str
+    name_th: str
+    unit: Optional[str] = None
+    data_type: str
+    options: Optional[list[str]] = None
+    group_name: str
+    better: str
+    required: bool
+    sort: int
+    badge_label: Optional[str] = None
+
+
 class ProductCreate(SQLModel):
     name: str
     price: int
+    # รับไว้เพื่อไม่ให้ client เก่าพัง แต่ไม่ถูกใช้แล้ว — ราคาก่อนลดระบบคำนวณเอง
     original_price: Optional[int] = None
     category_id: Optional[int] = None
     description: str = ""
@@ -75,6 +107,10 @@ class ProductCreate(SQLModel):
     free_shipping: bool = False
     image: str = "📦"
     media: list[MediaItem] = []
+    brand: Optional[str] = None
+    model_code: Optional[str] = None
+    barcode: Optional[str] = None
+    attributes: list[AttributeValueIn] = []
 
     @field_validator("price")
     @classmethod
@@ -94,13 +130,17 @@ class ProductCreate(SQLModel):
 class ProductUpdate(SQLModel):
     name: Optional[str] = None
     price: Optional[int] = None
-    original_price: Optional[int] = None
+    original_price: Optional[int] = None   # ไม่ถูกใช้แล้ว (ดู ProductCreate)
     category_id: Optional[int] = None
     description: Optional[str] = None
     stock: Optional[int] = None
     free_shipping: Optional[bool] = None
     image: Optional[str] = None
     media: Optional[list[MediaItem]] = None
+    brand: Optional[str] = None
+    model_code: Optional[str] = None
+    barcode: Optional[str] = None
+    attributes: Optional[list[AttributeValueIn]] = None   # ส่งมา = แทนทั้งชุด, ไม่ส่ง = คงเดิม
 
 
 class ProductRead(SQLModel):
@@ -111,7 +151,11 @@ class ProductRead(SQLModel):
     id: int
     name: str
     price: int
+    # ราคาก่อนลด (ราคาขีดฆ่า) ที่ระบบคำนวณ = ราคาต่ำสุดใน 30 วันก่อนราคาปัจจุบันเริ่มใช้
+    # null = ไม่ได้ลดราคา ไม่ต้องแสดงราคาขีดฆ่า
     original_price: Optional[int] = None
+    # % ส่วนลด — null = ไม่ต้องแสดง % (ไม่ได้ลด หรือถูกซ่อนเพราะขึ้นราคาก่อนลด)
+    discount_percent: Optional[int] = None
     image: str
     cover_url: Optional[str] = None
     shop_id: Optional[int] = None
@@ -126,6 +170,11 @@ class ProductRead(SQLModel):
     description: str
     is_active: bool = True
     media: list[MediaItem] = []
+    brand: Optional[str] = None
+    model_code: Optional[str] = None
+    barcode: Optional[str] = None
+    attributes: list[AttributeValueRead] = []
+    spec_complete: bool = False   # กรอกสเปกที่จำเป็นครบ → ป้าย "ข้อมูลครบ"
 
 
 # ---------- Cart ----------
@@ -151,12 +200,47 @@ class CartItemRead(SQLModel):
     free_shipping: bool = False
     shop_id: Optional[int] = None
     shop_name: str = ""
+    cart_item_id: Optional[int] = None
+    price_at_add: Optional[int] = None   # ราคาตอนใส่ตะกร้า
+
+
+class NoticeRead(SQLModel):
+    """notice ราคาลดของสินค้าในตะกร้า (sku_id = product_id ในระบบนี้)"""
+    id: int
+    sku_id: int
+    product_id: int
+    cart_item_id: int
+    product_name: str
+    image: str = "📦"
+    cover_url: Optional[str] = None
+    old_price: int     # ราคาตอนใส่ตะกร้า
+    new_price: int     # ราคาปัจจุบัน
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+
+    @field_validator("created_at", "read_at")
+    @classmethod
+    def as_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        # DB เก็บเป็น UTC แบบ naive → ใส่ timezone ให้ JSON ออกเป็น ...+00:00 (JS แปลงเวลาไทยถูก)
+        return v.replace(tzinfo=timezone.utc) if v is not None and v.tzinfo is None else v
+
+
+class NoticeList(SQLModel):
+    unread_count: int
+    notices: list[NoticeRead]
+
+
+class NoticeMarkRead(SQLModel):
+    ids: Optional[list[int]] = None   # None/ไม่ส่ง = ทุกอันที่ยังไม่อ่าน
 
 
 class CartRead(SQLModel):
     token: str
     items: list[CartItemRead]
     total: int
+    # notice ที่ยังไม่อ่าน (เฉพาะเจ้าของตะกร้าที่ล็อกอินอยู่ — guest ได้ [] เสมอ)
+    notices: list[NoticeRead] = []
 
 
 # ---------- Order ----------
@@ -167,6 +251,7 @@ class CheckoutRequest(SQLModel):
     address: str
     note: str = ""
     payment_method: str = PaymentMethod.COD
+    province: Optional[str] = None   # จังหวัดปลายทาง (ไม่ส่ง = เดาจากที่อยู่ / ใช้เรทเดียวทั้งประเทศ)
 
     @field_validator("payment_method")
     @classmethod
@@ -243,3 +328,203 @@ class ReviewRead(SQLModel):
 class UploadResult(SQLModel):
     url: str
     media_type: str
+
+
+# ---------- Seller price dashboard ----------
+
+class PriceWarning(SQLModel):
+    code: str       # raise_before_discount | raise_before_discount_grace | recent_raise
+    message: str    # ข้อความภาษาไทยอธิบายเหตุผลให้ผู้ขาย
+
+
+class PriceStatusItem(SQLModel):
+    product_id: int
+    name: str
+    is_active: bool
+    price: int
+    in_stock: bool
+    ref_price: Optional[int] = None            # ราคาขีดฆ่าที่ผู้ซื้อเห็น (= ProductRead.original_price)
+    min_30d: Optional[int] = None              # ราคาต่ำสุด 30 วันก่อนราคาปัจจุบันเริ่มใช้
+    discount_percent: Optional[int] = None     # % ที่คำนวณได้ (แม้ถูกซ่อน)
+    discount_hidden: bool = False              # true = ผู้ซื้อไม่เห็น %
+    max_increase_14d_percent: Optional[float] = None
+    warnings: list[PriceWarning] = []
+    carts_holding: int = 0                     # จำนวนตะกร้าที่มีสินค้านี้ (ไม่ระบุตัวผู้ซื้อ)
+    carts_notice_eligible: int = 0             # ในนั้นเป็นตะกร้าของผู้ใช้ที่ล็อกอิน (จะได้ notice ถ้าลดราคา)
+    ref_updated_at: Optional[datetime] = None
+
+    @field_validator("ref_updated_at")
+    @classmethod
+    def as_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return v.replace(tzinfo=timezone.utc) if v is not None and v.tzinfo is None else v
+
+
+class GraceInfo(SQLModel):
+    enabled: bool
+    active: bool
+    starts_at: date
+    ends_at: Optional[date] = None
+
+
+class PriceRules(SQLModel):
+    ref_window_days: int
+    raise_window_days: int
+    raise_percent: float
+    notice_min_percent: float
+    notice_min_baht: int
+
+
+class PriceStatus(SQLModel):
+    grace: GraceInfo
+    rules: PriceRules
+    items: list[PriceStatusItem]
+
+
+# ---------- เฟส 2: AI เสนอสเปก / ค่าส่ง / เปรียบเทียบ ----------
+
+class SpecSuggestionRead(SQLModel):
+    id: int
+    key: str
+    name_th: str
+    unit: Optional[str] = None
+    value_num: Optional[float] = None
+    value_text: Optional[str] = None
+    display: Optional[str] = None
+
+
+class KeysIn(SQLModel):
+    keys: list[str]
+
+
+class ProvinceRead(SQLModel):
+    name: str
+    region: str
+
+
+class AccountProvince(SQLModel):
+    province: Optional[str] = None
+    region: Optional[str] = None
+    source: Optional[str] = None   # account | order | null
+
+
+class ProvinceIn(SQLModel):
+    province: Optional[str] = None   # null = ล้างค่า
+
+
+class RegionRate(SQLModel):
+    region: str
+    rate: int
+    days_min: int = 2
+    days_max: int = 4
+
+
+class ShippingSettings(SQLModel):
+    flat_rate: int = 40
+    free_over: Optional[int] = 500
+    days_min: int = 2
+    days_max: int = 4
+    region_rates: list[RegionRate] = []
+
+
+class ShopQuote(SQLModel):
+    shop_id: Optional[int] = None
+    shop_name: str = ""
+    subtotal: int
+    fee: int
+    days_min: int
+    days_max: int
+    free_reason: Optional[str] = None   # item | threshold | null
+    free_over: Optional[int] = None
+
+
+class ShippingQuote(SQLModel):
+    province: Optional[str] = None
+    region: Optional[str] = None
+    shops: list[ShopQuote]
+    shipping_total: int
+    grand_total: int
+
+
+class CompareShipping(SQLModel):
+    fee: int
+    days_min: int
+    days_max: int
+    free_reason: Optional[str] = None   # item = สินค้านี้ส่งฟรี | threshold = ซื้อครบ free_over | null
+    free_over: Optional[int] = None
+
+
+class CompareItem(SQLModel):
+    product_id: int
+    name: str
+    image: str
+    cover_url: Optional[str] = None
+    price: int
+    original_price: Optional[int] = None
+    discount_percent: Optional[int] = None
+    rating: float
+    review_count: int
+    shop_id: Optional[int] = None
+    shop_name: str
+    shop_rating: float
+    stock: int
+    spec_complete: bool
+    category_id: Optional[int] = None
+    shipping: CompareShipping
+    total: int
+    badges: list[str] = []
+
+
+class CompareCell(SQLModel):
+    display: Optional[str] = None   # null = "ร้านไม่ได้ระบุ"
+    is_best: bool = False
+
+
+class CompareRow(SQLModel):
+    key: str
+    name_th: str
+    unit: Optional[str] = None
+    better: str
+    differs: bool
+    cells: list[CompareCell]
+
+
+class CompareGroup(SQLModel):
+    name: str
+    rows: list[CompareRow]
+
+
+class CompareResult(SQLModel):
+    province: Optional[str] = None
+    region: Optional[str] = None
+    same_category: bool
+    summary: Optional[str] = None
+    missing_ids: list[int] = []
+    items: list[CompareItem]
+    groups: list[CompareGroup]
+
+
+class SameModelRow(SQLModel):
+    product_id: int
+    shop_id: Optional[int] = None
+    shop_name: str
+    shop_rating: float
+    price: int
+    shipping_fee: int
+    total: int
+    days_min: int
+    days_max: int
+    match: str   # barcode | brand_model
+    free_reason: Optional[str] = None
+    free_over: Optional[int] = None
+
+
+class CompareIds(SQLModel):
+    ids: list[int]
+
+
+class Features(SQLModel):
+    """สวิตช์ฟีเจอร์ที่ frontend ใช้ตัดสินใจว่าจะแสดงปุ่ม/ทางเข้าไหม (public, cache ได้)"""
+    spec_suggest: bool          # มี LLM ให้ช่วยเสนอสเปก
+    llm_provider: str           # gemini | fake | none
+    chat: bool = False
+    chat_rollout_percent: int = 0

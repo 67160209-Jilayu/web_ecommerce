@@ -4,6 +4,7 @@
 ตรวจความปลอดภัยก่อนแอปเริ่มทำงาน (fail fast ดีกว่าปล่อยให้ขึ้น production ด้วยค่า dev)
 """
 import os
+from datetime import date
 from pathlib import Path
 
 # ค่าเดียวกับที่เขียนไว้ใน .env.example — ห้ามใช้ค่านี้บน production เด็ดขาด
@@ -35,7 +36,11 @@ SECRET_KEY = os.getenv("SECRET_KEY", DEV_SECRET_KEY)
 # โฟลเดอร์เก็บไฟล์ที่ผู้ขายอัปโหลด (ใช้เมื่อไม่ได้ตั้งค่า Cloudinary)
 # ตอน deploy ถ้าเก็บลงดิสก์ ต้องชี้ไปที่ persistent disk/volume
 # ไม่งั้นไฟล์จะหายทุกครั้งที่เซิร์ฟเวอร์รีสตาร์ต (ดู docs/deployment.md)
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+# ค่าเริ่มต้น = <โฟลเดอร์ที่มี app/>/uploads → ใน Docker คือ /app/uploads (เหมือนเดิม)
+# รันในเครื่องโดยไม่ใช้ Docker จะเป็น backend/uploads
+UPLOAD_DIR = Path(
+    os.getenv("UPLOAD_DIR", str(Path(__file__).resolve().parent.parent / "uploads"))
+)
 
 # ---------- Cloudinary (ที่เก็บรูป/วิดีโอบนคลาวด์) ----------
 # ตั้งค่าอย่างใดอย่างหนึ่ง:
@@ -101,6 +106,56 @@ def cloudinary_diagnosis() -> str:
 CORS_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()
 ]
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+# ---------- กฎราคาก่อนลด / notice ตะกร้า (เฟส 1) ----------
+# อ่านจาก env ตอน import แต่โค้ดอ้างผ่าน `config.<ชื่อ>` ทุกครั้ง จึง monkeypatch ในเทสต์ได้
+
+PRICE_REF_WINDOW_DAYS = int(os.getenv("PRICE_REF_WINDOW_DAYS", "30"))      # ราคาต่ำสุดกี่วันก่อนเริ่มลด
+# ราคาต้องใช้จริงรวม ≥ เท่านี้วันในหน้าต่าง 30 วัน ถึงนับเป็น "ราคาก่อนลด" ได้ (0 = ปิดกฎนี้)
+PRICE_REF_MIN_DAYS = float(os.getenv("PRICE_REF_MIN_DAYS", "7"))
+PRICE_RAISE_WINDOW_DAYS = int(os.getenv("PRICE_RAISE_WINDOW_DAYS", "14"))  # ดูการขึ้นราคาย้อนหลังกี่วัน
+PRICE_RAISE_PERCENT = float(os.getenv("PRICE_RAISE_PERCENT", "15"))        # ขึ้น ≥ เท่านี้ % = ซ่อน % ส่วนลด
+
+# ช่วงผ่อนผัน: ระหว่างนี้แค่เตือนใน dashboard ผู้ขาย ยังไม่ซ่อน % ส่วนลดบนหน้าเว็บ
+# PRICE_GRACE_ENABLED=false = บังคับใช้กฎทันที (ไม่มีช่วงผ่อนผัน)
+PRICE_GRACE_ENABLED = _env_bool("PRICE_GRACE_ENABLED", True)
+PRICE_GRACE_START = date.fromisoformat(os.getenv("PRICE_GRACE_START", "2026-10-03"))
+PRICE_GRACE_DAYS = int(os.getenv("PRICE_GRACE_DAYS", "30"))
+
+# notice ราคาลดในตะกร้า: ลด ≥ 3% หรือ ≥ 20 บาท (อย่างใดอย่างหนึ่ง) จากราคาตอนใส่ตะกร้า
+CART_NOTICE_MIN_PERCENT = float(os.getenv("CART_NOTICE_MIN_PERCENT", "3"))
+CART_NOTICE_MIN_BAHT = int(os.getenv("CART_NOTICE_MIN_BAHT", "20"))
+
+
+# ---------- LLM (เฟส 2–4) ----------
+# LLM_PROVIDER: auto (gemini ถ้ามี key ไม่งั้น none) | gemini | fake | none
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()   # อ่านจาก env เท่านั้น ห้ามเขียนในโค้ด
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")  # เปลี่ยนรุ่นได้โดยไม่ต้องแก้โค้ด
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "20"))
+
+
+# ---------- แชทช่วยช้อป (เฟส 3) — สวิตช์/การ rollout ถูกทับได้จากตาราง app_setting (ดู app/settings.py)
+CHAT_ENABLED = _env_bool("CHAT_ENABLED", True)
+CHAT_ROLLOUT_PERCENT = int(os.getenv("CHAT_ROLLOUT_PERCENT", "100"))   # production เริ่มที่ 5
+CHAT_MAX_CHARS = int(os.getenv("CHAT_MAX_CHARS", "500"))
+CHAT_DAILY_USER = int(os.getenv("CHAT_DAILY_USER", "30"))
+CHAT_DAILY_GUEST = int(os.getenv("CHAT_DAILY_GUEST", "5"))
+CHAT_MIN_INTERVAL_SEC = float(os.getenv("CHAT_MIN_INTERVAL_SEC", "3"))
+CHAT_HISTORY_MESSAGES = int(os.getenv("CHAT_HISTORY_MESSAGES", "6"))
+CHAT_MAX_PRODUCTS = int(os.getenv("CHAT_MAX_PRODUCTS", "10"))
+CHAT_MAX_CARDS = int(os.getenv("CHAT_MAX_CARDS", "5"))
+CHAT_MAX_TOKENS = int(os.getenv("CHAT_MAX_TOKENS", "300"))
+CHAT_CACHE_HOURS = float(os.getenv("CHAT_CACHE_HOURS", "6"))
+CHAT_LOG_DAYS = int(os.getenv("CHAT_LOG_DAYS", "30"))
 
 
 def validate() -> None:

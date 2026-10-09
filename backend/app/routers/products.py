@@ -4,9 +4,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
-from app import crud, models, schemas
+from app import compare, crud, models, schemas, spec_suggest
 from app.database import get_session
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, get_optional_user
 from app.routers.shops import require_own_shop
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -106,3 +106,89 @@ def delete_product(
     """ปิดขายสินค้า (soft delete) — ไม่ลบจริงเพราะคำสั่งซื้อเก่ายังอ้างอิงอยู่"""
     product = _load_own_product(product_id, session, current_user)
     crud.deactivate_product(session, product)
+
+
+# ---------------------------------------------------------------- เฟส 2
+
+def _active_product(product_id: int, session: Session) -> models.Product:
+    product = session.get(models.Product, product_id)
+    if product is None or not product.is_active:
+        raise HTTPException(status_code=404, detail="ไม่พบสินค้านี้")
+    return product
+
+
+@router.get("/{product_id}/same-model", response_model=list[schemas.SameModelRow])
+def same_model(
+    product_id: int,
+    province: Optional[str] = Query(None, description="จังหวัดผู้ซื้อ (คิดค่าส่ง)"),
+    session: Session = Depends(get_session),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+):
+    """ร้านอื่นที่ขายรุ่นนี้ (บาร์โค้ด หรือ แบรนด์+รหัสรุ่นตรงกัน) — [] = ไม่ต้องแสดงส่วนนี้"""
+    product = _active_product(product_id, session)
+    if not province and current_user is not None:
+        province = crud.get_account_province(session, current_user).province
+    return compare.same_model(session, product, province)
+
+
+@router.get("/{product_id}/similar", response_model=list[schemas.ProductRead])
+def similar_products(
+    product_id: int,
+    limit: int = Query(3, ge=1, le=10),
+    session: Session = Depends(get_session),
+):
+    """สินค้าหมวดเดียวกันที่ราคาใกล้เคียง สำหรับ "เทียบกับสินค้าคล้ายกัน" """
+    product = _active_product(product_id, session)
+    return [crud._to_product_read(p) for p in compare.similar(session, product, limit)]
+
+
+@router.get("/{product_id}/spec-suggestions", response_model=list[schemas.SpecSuggestionRead])
+def list_spec_suggestions(
+    product_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(get_current_user),
+):
+    """ค่าสเปกที่ AI เสนอ (รอผู้ขายยืนยัน) — เฉพาะเจ้าของร้าน"""
+    product = _load_own_product(product_id, session, current_user)
+    return crud.list_spec_suggestions(session, product)
+
+
+@router.post("/{product_id}/spec-suggestions/generate", response_model=list[schemas.SpecSuggestionRead])
+def generate_spec_suggestions(
+    product_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(get_current_user),
+):
+    """ให้ AI อ่านคำอธิบายแล้วเสนอสเปกเดี๋ยวนี้ (วันละครั้งต่อสินค้า; ไม่มี LLM → [])"""
+    product = _load_own_product(product_id, session, current_user)
+    try:
+        spec_suggest.generate_for_product(session, product)
+    except PermissionError as err:
+        raise HTTPException(status_code=429, detail=str(err))
+    return crud.list_spec_suggestions(session, product)
+
+
+@router.post("/{product_id}/spec-suggestions/confirm", response_model=schemas.ProductRead)
+def confirm_spec_suggestions(
+    product_id: int,
+    data: schemas.KeysIn,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(get_current_user),
+):
+    """ยืนยันข้อเสนอที่เลือก → บันทึกเป็นสเปกของสินค้า (source = ai_confirmed)"""
+    product = _load_own_product(product_id, session, current_user)
+    crud.resolve_spec_suggestions(session, product, data.keys, confirm=True)
+    session.refresh(product)
+    return crud._to_product_read(product)
+
+
+@router.post("/{product_id}/spec-suggestions/dismiss", status_code=204)
+def dismiss_spec_suggestions(
+    product_id: int,
+    data: schemas.KeysIn,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(get_current_user),
+):
+    """ปัดข้อเสนอที่ไม่ถูกต้องทิ้ง"""
+    product = _load_own_product(product_id, session, current_user)
+    crud.resolve_spec_suggestions(session, product, data.keys, confirm=False)

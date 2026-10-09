@@ -83,3 +83,25 @@ def list_shop_products(shop_id: int, session: Session = Depends(get_session)):
     if crud.get_shop(session, shop_id) is None:
         raise HTTPException(status_code=404, detail="ไม่พบร้านค้านี้")
     return crud.list_products(session, shop_id=shop_id)
+
+
+@router.get("/me/shipping", response_model=schemas.ShippingSettings)
+def get_my_shipping(
+    session: Session = Depends(get_session),
+    shop: models.Shop = Depends(require_own_shop),
+):
+    """ค่าส่งของร้านฉัน (ยังไม่ตั้ง = ค่าเริ่มต้น 40 บาท ส่งฟรีเมื่อครบ 500)"""
+    return crud.get_shop_shipping(session, shop)
+
+
+@router.put("/me/shipping", response_model=schemas.ShippingSettings)
+def update_my_shipping(
+    data: schemas.ShippingSettings,
+    session: Session = Depends(get_session),
+    shop: models.Shop = Depends(require_own_shop),
+):
+    """ตั้งค่าส่ง: เรทเดียวทั้งประเทศ + เรทเฉพาะภาค (แทนทั้งชุด)"""
+    try:
+        return crud.update_shop_shipping(session, shop, data)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))

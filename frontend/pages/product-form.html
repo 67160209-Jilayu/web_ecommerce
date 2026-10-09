@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261004b" />
 </head>
 <body>
   <header class="topbar">
@@ -29,7 +29,7 @@
     <div id="form-body"><p class="state-message">กำลังโหลด...</p></div>
   </main>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261004b"></script>
   <script>
     let editingId = null;
     let mediaList = []; // [{url, media_type}] — เรียงลำดับตามที่แสดง รูปแรกใช้เป็นปก
@@ -67,9 +67,16 @@
           return;
         }
         document.getElementById("form-title").textContent = "แก้ไขสินค้า";
+        try {
+          const status = await fetchPriceStatus();
+          const items = Array.isArray(status) ? status : status?.items || [];
+          priceStatus = items.find((x) => x.product_id === editingId) || null;
+          graceActive = !!status?.grace?.active;
+        } catch {}
         mediaList = [...(product.media || [])];
       }
 
+      currentProduct = product;
       renderForm(categories, product);
     }
 
@@ -90,8 +97,13 @@
                 <input type="number" id="p-price" required min="1" value="${p ? p.price : ""}" />
               </div>
               <div class="form-group">
-                <label for="p-original">ราคาเดิม (ไว้โชว์ส่วนลด)</label>
-                <input type="number" id="p-original" min="0" value="${p?.original_price ?? ""}" />
+                <label>ราคาก่อนลด (ระบบคำนวณให้)</label>
+                <div class="readonly-field" id="p-ref-price" aria-readonly="true">${refPriceText(p)}</div>
+                <div class="form-hint">
+                  ระบบตั้งราคาขีดฆ่าให้อัตโนมัติ จากราคาขายต่ำสุดใน 30 วันก่อนเริ่มลด
+                  เพื่อให้ลูกค้ามั่นใจว่าส่วนลดเป็นของจริง ดูรายละเอียดได้ที่แท็บ "ราคา" ในแดชบอร์ดร้าน
+                </div>
+                ${p ? `<div class="price-preview" id="price-preview" aria-live="polite"></div>` : ""}
               </div>
               <div class="form-group">
                 <label for="p-stock">จำนวนคงเหลือ *</label>
@@ -117,6 +129,31 @@
               <textarea id="p-desc" rows="4"
                 placeholder="บอกรายละเอียด ขนาด วัสดุ วิธีใช้ เพื่อให้ลูกค้าตัดสินใจง่ายขึ้น">${p ? escapeHtml(p.description) : ""}</textarea>
             </div>
+
+            <fieldset class="spec-fieldset">
+              <legend>แบรนด์และรหัสรุ่น</legend>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="p-brand">แบรนด์</label>
+                  <input type="text" id="p-brand" maxlength="60" value="${p?.brand ? escapeHtml(p.brand) : ""}" placeholder="เช่น Sony" />
+                </div>
+                <div class="form-group">
+                  <label for="p-model">รหัสรุ่น</label>
+                  <input type="text" id="p-model" maxlength="60" value="${p?.model_code ? escapeHtml(p.model_code) : ""}" placeholder="เช่น WH-1000XM5" />
+                </div>
+                <div class="form-group">
+                  <label for="p-barcode">บาร์โค้ด (ถ้ามี)</label>
+                  <input type="text" id="p-barcode" maxlength="20" inputmode="numeric"
+                    value="${p?.barcode ? escapeHtml(p.barcode) : ""}" placeholder="ตัวเลขใต้บาร์โค้ดบนกล่อง" />
+                </div>
+              </div>
+              <div class="form-hint">ใส่ให้ตรงกับกล่องสินค้า ลูกค้าจะเห็นร้านคุณใน "ร้านอื่นที่ขายรุ่นนี้" เมื่อดูสินค้ารุ่นเดียวกัน</div>
+            </fieldset>
+
+            <fieldset class="spec-fieldset" id="spec-fieldset">
+              <legend>สเปกสินค้า</legend>
+              <div id="spec-fields"><p class="form-hint">เลือกหมวดหมู่ก่อน แล้วช่องสเปกของหมวดนั้นจะขึ้นตรงนี้</p></div>
+            </fieldset>
 
             <div class="form-grid">
               <div class="form-group">
@@ -154,7 +191,299 @@
 
       setupUpload();
       renderMediaPreview();
+      document.getElementById("p-category").addEventListener("change", (e) => loadSpecFields(e.target.value));
+      loadSpecFields(document.getElementById("p-category").value, p);
+      if (p) {
+        const priceInput = document.getElementById("p-price");
+        priceInput.addEventListener("input", renderPricePreview);
+        renderPricePreview();
+      }
       document.getElementById("product-form").addEventListener("submit", submitForm);
+    }
+
+    let currentProduct = null; // สินค้าที่กำลังแก้ไข (ราคาปัจจุบันก่อนบันทึก)
+    let graceActive = false; // ช่วงผ่อนผัน: เตือนอย่างเดียว ยังไม่ซ่อน % บนหน้าเว็บ
+    let priceStatus = null; // สถานะราคาของสินค้าที่กำลังแก้ไข จาก /seller/price-status
+
+    /** ข้อความในช่องราคาก่อนลด (อ่านอย่างเดียว) */
+    function refPriceText(p) {
+      if (!p) return "ระบบจะคำนวณให้หลังลงขาย และเมื่อมีประวัติราคาเพียงพอ";
+      if (priceStatus?.ref_price) return formatBaht(priceStatus.ref_price);
+      if (priceStatus?.min_30d)
+        return `ไม่มีส่วนลดตอนนี้ <span class="form-hint" style="margin:0 0 0 8px;">(ราคาต่ำสุด 30 วัน ${formatBaht(priceStatus.min_30d)} — ตั้งราคาต่ำกว่านี้จึงจะแสดงเป็นส่วนลด)</span>`;
+      return "ยังไม่มี — ระบบกำลังเก็บประวัติราคา";
+    }
+
+    /**
+     * พรีวิวว่าลูกค้าจะเห็นราคาอย่างไรถ้าบันทึกราคานี้ (ประมาณการจากราคาก่อนลดที่ระบบคำนวณไว้ตอนนี้
+     * ระบบคำนวณจริงอีกครั้งหลังบันทึก) — ใช้ priceHtml() ตัวเดียวกับหน้าร้าน
+     */
+    /** ข้อความเตือนจากระบบ (มีวันที่ในข้อความแล้ว) — แสดงตามที่ backend ส่งมา */
+    function warningList() {
+      const ws = priceStatus?.warnings || [];
+      return ws.length
+        ? `<ul class="warn-list" style="margin-top: 4px;">${ws.map((w) => `<li>${escapeHtml(w.message)}</li>`).join("")}</ul>`
+        : "";
+    }
+
+    function renderPricePreview() {
+      const box = document.getElementById("price-preview");
+      if (!box) return;
+      const price = parseInt(document.getElementById("p-price").value, 10);
+      if (!price || price < 1) {
+        box.innerHTML = "";
+        return;
+      }
+      // ราคาเดิม → ใช้ค่าที่ระบบคำนวณไว้ตรงๆ
+      // ราคาใหม่ → ราคาขีดฆ่าคือราคาต่ำสุดใน 30 วันก่อนหน้า ซึ่งรวมราคาปัจจุบันด้วย
+      // (เช่น 390 → 329 → 300 จะขีดฆ่าที่ 329 ไม่ใช่ 390)
+      const current = currentProduct?.price;
+      const ref =
+        price === current
+          ? priceStatus?.ref_price
+          : Math.min(...[priceStatus?.min_30d, current].filter((x) => x > 0));
+      const isDiscount = Number.isFinite(ref) && ref > price;
+      // ปัดลงแบบเดียวกับ backend (pricing.py) และต่ำกว่า 1% ไม่แสดง
+      let pct = isDiscount ? Math.floor(((ref - price) * 100) / ref) : null;
+      if (price === current && priceStatus) pct = priceStatus.discount_percent;
+      if (!(pct >= 1)) pct = null;
+      const codes = (priceStatus?.warnings || []).map((w) => w.code);
+      // ขึ้นราคาก่อนลด และพ้นช่วงผ่อนผันแล้ว → ระบบจะไม่แสดง %
+      const willHide =
+        isDiscount && !graceActive &&
+        (priceStatus?.discount_hidden || codes.includes("recent_raise") || codes.includes("raise_before_discount"));
+      const shown = { price, original_price: isDiscount ? ref : null, discount_percent: willHide ? null : pct };
+      box.innerHTML = `
+        ลูกค้าจะเห็น (ประมาณการ): <span class="product-price">${priceHtml(shown)}</span>
+        ${willHide ? `<div class="form-hint" style="color: var(--warn);">จะไม่แสดง % ส่วนลด เพราะมีการขึ้นราคาภายใน 14 วันก่อนลด</div>${warningList()}` : ""}
+        ${isDiscount && graceActive && codes.some((c) => c.startsWith("raise") || c === "recent_raise")
+          ? `<div class="form-hint" style="color: var(--warn);">ช่วงผ่อนผัน: ตอนนี้ยังแสดง % ให้ แต่หลังหมดช่วงผ่อนผัน % จะถูกซ่อนเพราะมีการขึ้นราคาก่อนลด</div>
+             ${warningList()}`
+          : ""}
+        ${!isDiscount && Number.isFinite(ref) ? `<div class="form-hint">ราคานี้ไม่ต่ำกว่าราคาก่อนลด ${formatBaht(ref)} จึงไม่แสดงเป็นส่วนลด</div>` : ""}`;
+    }
+
+    /* ---------- สเปกตามแม่แบบหมวด (ช่องเลือก/ตัวเลขที่ล็อกหน่วย ไม่ใช่ข้อความอิสระ) ---------- */
+    let specTemplate = []; // [{key, name_th, unit, data_type, options, group_name, required, sort}]
+    let specSuggestions = []; // ค่าที่ AI เสนอจากคำอธิบายเดิม — ต้องกดยืนยันเองเท่านั้น
+    let specSuggestEnabled = null; // null = ไม่รู้ (backend ยังไม่มี /features), false = ปิด → ซ่อนปุ่ม
+
+    function currentSpecValues(p) {
+      const map = {};
+      (p?.attributes || []).forEach((a) => {
+        map[a.key] = a.value_num ?? a.value_text ?? "";
+      });
+      return map;
+    }
+
+    async function loadSpecFields(categoryId, p) {
+      const box = document.getElementById("spec-fields");
+      // เปลี่ยนหมวด → เก็บค่าที่กรอกไว้ก่อน (key ที่ซ้ำในหมวดใหม่จะได้ไม่หาย)
+      const keep = p ? currentSpecValues(p) : readSpecInputs();
+      if (!categoryId) {
+        specTemplate = [];
+        box.innerHTML = `<p class="form-hint">เลือกหมวดหมู่ก่อน แล้วช่องสเปกของหมวดนั้นจะขึ้นตรงนี้</p>`;
+        return;
+      }
+      box.innerHTML = `<p class="form-hint">กำลังโหลดช่องสเปก...</p>`;
+      try {
+        specTemplate = (await fetchCategoryAttributes(categoryId)) || [];
+      } catch {
+        specTemplate = [];
+      }
+      if (!specTemplate.length) {
+        box.innerHTML = `<p class="form-hint">หมวดนี้ยังไม่มีแม่แบบสเปก</p>`;
+        return;
+      }
+      const features = await fetchFeatures();
+      if (features && typeof features.spec_suggest === "boolean") specSuggestEnabled = features.spec_suggest;
+      if (p && editingId) {
+        try {
+          const res = await fetchSpecSuggestions(editingId);
+          specSuggestions = Array.isArray(res) ? res : res?.suggestions || [];
+        } catch {
+          specSuggestions = [];
+        }
+      }
+      renderSpecFields(keep);
+    }
+
+    function specInputHtml(a, value) {
+      const id = `attr-${escapeHtml(a.key)}`;
+      const key = escapeHtml(a.key);
+      const v = value === undefined || value === null ? "" : String(value);
+      if (a.data_type === "enum" && (a.options || []).length) {
+        return `<select id="${id}" data-attr="${key}">
+            <option value="">— ไม่ระบุ —</option>
+            ${a.options.map((o) => `<option value="${escapeHtml(o)}" ${o === v ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}
+          </select>`;
+      }
+      if (a.data_type === "bool") {
+        return `<select id="${id}" data-attr="${key}">
+            <option value="">— ไม่ระบุ —</option>
+            <option value="1" ${v === "1" || v === "true" ? "selected" : ""}>มี / ใช่</option>
+            <option value="0" ${v === "0" || v === "false" ? "selected" : ""}>ไม่มี / ไม่ใช่</option>
+          </select>`;
+      }
+      if (a.data_type === "number") {
+        return `<div class="unit-input">
+            <input type="number" id="${id}" data-attr="${key}" step="any" min="0" value="${escapeHtml(v)}" />
+            ${a.unit ? `<span class="unit-suffix">${escapeHtml(a.unit)}</span>` : ""}
+          </div>`;
+      }
+      return `<input type="text" id="${id}" data-attr="${key}" maxlength="80" value="${escapeHtml(v)}" />`;
+    }
+
+    function suggestionText(sg) {
+      const a = specTemplate.find((x) => x.key === sg.key);
+      if (sg.display != null) return String(sg.display);
+      const raw = sg.value_num ?? sg.value_text;
+      if (a?.data_type === "bool") return Number(raw) ? "มี / ใช่" : "ไม่มี / ไม่ใช่";
+      return `${raw}${a?.unit ? ` ${a.unit}` : ""}`;
+    }
+
+    function renderSpecFields(values) {
+      const box = document.getElementById("spec-fields");
+      const groups = {};
+      [...specTemplate]
+        .sort((x, y) => (x.sort ?? 0) - (y.sort ?? 0))
+        .forEach((a) => (groups[a.group_name || "ทั่วไป"] = groups[a.group_name || "ทั่วไป"] || []).push(a));
+      const sugg = specSuggestions.filter((s) => specTemplate.some((a) => a.key === s.key));
+
+      box.innerHTML = `
+        ${sugg.length
+          ? `<div class="alert alert-info spec-suggest">
+               <b>🤖 ระบบอ่านคำอธิบายสินค้าแล้วเสนอค่าสเปก ${sugg.length} ช่อง</b> —
+               ตรวจแล้วกดยืนยันเฉพาะที่ถูกต้อง (ระบบไม่บันทึกเอง)
+               <ul>${sugg
+                 .map((sg, i) => {
+                   const a = specTemplate.find((x) => x.key === sg.key);
+                   return `<li>${escapeHtml(a?.name_th || sg.key)}: <b>${escapeHtml(suggestionText(sg))}</b>
+                     <button type="button" class="btn-ghost btn-xs" onclick="acceptSuggestion(${i})">ใช้ค่านี้</button>
+                     <button type="button" class="btn-ghost btn-xs" onclick="rejectSuggestion(${i})">ไม่ใช่</button></li>`;
+                 })
+                 .join("")}</ul>
+               ${sugg.length > 1 ? `<button type="button" class="btn btn-primary btn-sm" onclick="acceptSuggestion()">ยืนยันทั้งหมด</button>` : ""}
+             </div>`
+          : ""}
+        ${Object.entries(groups)
+          .map(
+            ([g, list]) => `
+          <div class="spec-group-title">${escapeHtml(g)}</div>
+          <div class="form-grid">
+            ${list
+              .map(
+                (a) => `
+              <div class="form-group">
+                <label for="attr-${escapeHtml(a.key)}">${escapeHtml(a.name_th)}${a.required ? " *" : ""}</label>
+                ${specInputHtml(a, values[a.key])}
+              </div>`
+              )
+              .join("")}
+          </div>`
+          )
+          .join("")}
+        <div class="form-hint" id="spec-progress" aria-live="polite"></div>
+        ${editingId && !sugg.length && specSuggestEnabled !== false
+          ? `<button type="button" class="btn-ghost btn-sm" id="gen-suggest-btn" style="margin-top: 8px;"
+               onclick="generateSuggestions(this)">🤖 ให้ระบบช่วยอ่านคำอธิบายแล้วเสนอค่าสเปก</button>`
+          : ""}`;
+      specSuggestions = sugg;
+      box.querySelectorAll("[data-attr]").forEach((el) => {
+        el.addEventListener("input", updateSpecProgress);
+        el.addEventListener("change", updateSpecProgress);
+      });
+      updateSpecProgress();
+    }
+
+    function readSpecInputs() {
+      const out = {};
+      document.querySelectorAll("#spec-fields [data-attr]").forEach((el) => {
+        if (el.value !== "") out[el.dataset.attr] = el.value;
+      });
+      return out;
+    }
+
+    /** ส่งเฉพาะช่องที่กรอก: ตัวเลข/ใช่-ไม่ใช่ → value_num, ตัวเลือก/ข้อความ → value_text */
+    function collectSpecValues() {
+      const values = readSpecInputs();
+      return specTemplate
+        .filter((a) => values[a.key] !== undefined && String(values[a.key]).trim() !== "")
+        .map((a) =>
+          a.data_type === "number" || a.data_type === "bool"
+            ? { key: a.key, value_num: Number(values[a.key]) }
+            : { key: a.key, value_text: String(values[a.key]).trim() }
+        );
+    }
+
+    function updateSpecProgress() {
+      const el = document.getElementById("spec-progress");
+      if (!el) return;
+      const required = specTemplate.filter((a) => a.required);
+      if (!required.length) {
+        el.textContent = "";
+        return;
+      }
+      const values = readSpecInputs();
+      const done = required.filter((a) => values[a.key] !== undefined).length;
+      el.textContent =
+        done === required.length
+          ? `✓ กรอกช่องที่มี * ครบแล้ว — สินค้าจะได้ป้าย "ข้อมูลครบ" และขึ้นอันดับดีขึ้นในการค้นหา`
+          : `กรอกช่องที่มี * แล้ว ${done}/${required.length} — กรอกครบเพื่อรับป้าย "ข้อมูลครบ" และขึ้นอันดับดีขึ้นในการค้นหา`;
+    }
+
+    /** ยืนยันค่าที่ AI เสนอ (ไม่ส่ง index = ทั้งหมด) แล้วเติมลงช่อง */
+    async function acceptSuggestion(index) {
+      const picked = index === undefined ? specSuggestions : [specSuggestions[index]].filter(Boolean);
+      const keys = picked.map((s) => s.key);
+      if (!keys.length) return;
+      try {
+        await confirmSpecSuggestions(editingId, keys);
+      } catch (err) {
+        showToast(err.message, "error");
+        return;
+      }
+      const values = readSpecInputs();
+      picked.forEach((s) => (values[s.key] = s.value_num ?? s.value_text));
+      specSuggestions = specSuggestions.filter((s) => !keys.includes(s.key));
+      renderSpecFields(values);
+      showToast("ใส่ค่าสเปกที่ยืนยันแล้ว");
+    }
+
+    /** ขอให้ระบบอ่านคำอธิบายสินค้า (ที่บันทึกแล้ว) เสนอค่าสเปก — ได้วันละครั้งต่อสินค้า */
+    async function generateSuggestions(btn) {
+      btn.disabled = true;
+      btn.textContent = "กำลังอ่านคำอธิบาย...";
+      try {
+        const res = await generateSpecSuggestions(editingId);
+        specSuggestions = Array.isArray(res) ? res : res?.suggestions || [];
+        if (!specSuggestions.length) {
+          showToast(
+            specSuggestEnabled === false
+              ? "ระบบช่วยอ่านคำอธิบายยังไม่เปิดใช้"
+              : "ระบบอ่านคำอธิบายแล้ว ไม่พบค่าสเปกเพิ่มเติม — ลองเขียนคำอธิบายให้ละเอียดขึ้น"
+          );
+          btn.textContent = "🤖 ให้ระบบช่วยอ่านคำอธิบายแล้วเสนอค่าสเปก";
+          btn.disabled = false;
+          return;
+        }
+        renderSpecFields(readSpecInputs());
+      } catch (err) {
+        showToast(err.message, "error");
+        btn.textContent = "🤖 ให้ระบบช่วยอ่านคำอธิบายแล้วเสนอค่าสเปก";
+        btn.disabled = false;
+      }
+    }
+
+    async function rejectSuggestion(index) {
+      const sg = specSuggestions[index];
+      if (!sg) return;
+      try {
+        await dismissSpecSuggestions(editingId, [sg.key]);
+      } catch {}
+      const values = readSpecInputs();
+      specSuggestions = specSuggestions.filter((s) => s !== sg);
+      renderSpecFields(values);
     }
 
     /* ---------- อัปโหลดสื่อ ---------- */
@@ -228,19 +557,21 @@
       const btn = document.getElementById("submit-btn");
       errorEl.style.display = "none";
 
-      const original = document.getElementById("p-original").value;
       const categoryId = document.getElementById("p-category").value;
 
       const payload = {
         name: document.getElementById("p-name").value.trim(),
         price: parseInt(document.getElementById("p-price").value, 10),
-        original_price: original ? parseInt(original, 10) : null,
         category_id: categoryId ? parseInt(categoryId, 10) : null,
         description: document.getElementById("p-desc").value.trim(),
         stock: parseInt(document.getElementById("p-stock").value, 10),
         free_shipping: document.getElementById("p-free").checked,
         image: document.getElementById("p-emoji").value.trim() || "📦",
         media: mediaList,
+        brand: document.getElementById("p-brand").value.trim() || null,
+        model_code: document.getElementById("p-model").value.trim() || null,
+        barcode: document.getElementById("p-barcode").value.trim() || null,
+        attributes: collectSpecValues(),
       };
 
       btn.disabled = true;

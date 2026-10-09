@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261004b" />
 </head>
 <body>
   <header class="topbar">
@@ -31,10 +31,13 @@
     <div id="detail-content">
       <p class="state-message">กำลังโหลดข้อมูลสินค้า...</p>
     </div>
+    <div id="specs-content"></div>
+    <div id="same-model-content"></div>
     <div id="review-content"></div>
   </main>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261004b"></script>
+  <script src="../js/chat.js?v=20261004b"></script>
   <script>
     document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -122,17 +125,17 @@
           <div>
             <h1 class="detail-name">${escapeHtml(product.name)}</h1>
             <div class="detail-shop">
-              ร้านค้า: <a href="shop.html?id=${product.shop_id}" style="color: var(--chili); font-weight: 600;">${escapeHtml(product.shop_name)}</a>
+              ร้านค้า: <a href="shop.html?id=${product.shop_id}" style="color: var(--azure); font-weight: 600;">${escapeHtml(product.shop_name)}</a>
               · ${product.review_count > 0 ? `⭐ ${product.rating} (${product.review_count} รีวิว)` : "ยังไม่มีรีวิว"}
               · ขายแล้ว ${product.sold.toLocaleString("th-TH")} ชิ้น
             </div>
             <span class="pill-muted">${escapeHtml(product.category)}</span>
             ${product.free_shipping ? `<span class="badge-free-shipping" style="margin-left:8px">จัดส่งฟรี</span>` : ""}
+            ${product.spec_complete ? `<span style="margin-left:8px">${specCompleteBadge(product)}</span>` : ""}
 
             <div class="detail-price-box">
               <div class="detail-price">
-                ${formatBaht(product.price)}
-                ${product.original_price ? `<span class="original">${formatBaht(product.original_price)}</span>` : ""}
+                ${priceHtml(product)}
               </div>
             </div>
 
@@ -152,6 +155,12 @@
                   ${lowStock ? `<p class="stock-warning">เหลือสินค้าจำนวนน้อย รีบสั่งซื้อก่อนหมด</p>` : ""}
                   <button class="btn btn-primary" id="add-to-cart-btn">เพิ่มลงตะกร้า</button>`
             }
+            <div class="detail-compare-actions">
+              ${compareButtonHtml(product, "compare-btn-lg")}
+              <button type="button" class="btn-ghost" id="compare-similar-btn">เทียบกับสินค้าคล้ายกัน</button>
+              <button type="button" class="btn-ghost chat-entry-btn" data-chat-entry ${ShopChat.isReady() ? "" : "hidden"}
+                onclick="ShopChat.open()">💬 ถามเกี่ยวกับสินค้านี้</button>
+            </div>
           </div>
         </div>`;
 
@@ -181,7 +190,137 @@
         });
       }
 
+      document.getElementById("compare-similar-btn").addEventListener("click", compareSimilar);
+      renderSpecs(product);
+      loadSameModel(product);
       loadReviews(id, product);
+    }
+
+    /** "เทียบกับสินค้าคล้ายกัน": เอาสินค้านี้ + สินค้าหมวดเดียวกันที่ใกล้เคียงไปเปิดหน้าเทียบเลย */
+    async function compareSimilar(e) {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const similar = ((await fetchSimilar(currentProduct.id, 3)) || [])
+          .filter((p) => p.id !== currentProduct.id)
+          .slice(0, COMPARE_MAX - 1);
+        if (!similar.length) {
+          showToast("ยังไม่มีสินค้าคล้ายกันในหมวดนี้ให้เทียบ", "error");
+          return;
+        }
+        window.location.href = compareUrl([currentProduct.id, ...similar.map((p) => p.id)]);
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    /** สเปกสินค้าจัดกลุ่มตามแม่แบบหมวด (แสดงเฉพาะที่ผู้ขายกรอก) */
+    function renderSpecs(product) {
+      const attrs = (product.attributes || []).filter(
+        (a) => a.display !== null && a.display !== undefined && a.display !== ""
+      );
+      const box = document.getElementById("specs-content");
+      const brandLine = [product.brand, product.model_code].filter(Boolean).map(escapeHtml).join(" · ");
+      if (!attrs.length && !brandLine) {
+        box.innerHTML = "";
+        return;
+      }
+      const groups = {};
+      attrs.forEach((a) => (groups[a.group_name || "ทั่วไป"] = groups[a.group_name || "ทั่วไป"] || []).push(a));
+      box.innerHTML = `
+        <div class="review-section">
+          <h2 class="panel-title" style="margin-bottom: 10px;">สเปกสินค้า</h2>
+          ${brandLine ? `<p class="spec-brand">แบรนด์/รุ่น: ${brandLine}</p>` : ""}
+          ${Object.entries(groups)
+            .map(
+              ([g, list]) => `
+            <div class="spec-group">
+              <div class="spec-group-title">${escapeHtml(g)}</div>
+              <dl class="spec-list">
+                ${list
+                  .map(
+                    (a) => `<dt>${escapeHtml(a.name_th || a.key)}</dt>
+                            <dd>${escapeHtml(String(a.display))}</dd>`
+                  )
+                  .join("")}
+              </dl>
+            </div>`
+            )
+            .join("")}
+        </div>`;
+    }
+
+    /** "ร้านอื่นที่ขายรุ่นนี้" — จับคู่จากบาร์โค้ด หรือแบรนด์+รหัสรุ่นตรงกัน; ไม่มีก็ไม่แสดงส่วนนี้ */
+    async function loadSameModel(product) {
+      const box = document.getElementById("same-model-content");
+      const province = await getBuyerProvince();
+      let list = [];
+      try {
+        const res = await fetchSameModel(product.id, province);
+        list = Array.isArray(res) ? res : res?.items || [];
+      } catch {
+        return;
+      }
+      if (!list.length) {
+        box.innerHTML = "";
+        return;
+      }
+      // ราคารวมค่าส่งของร้านนี้ (จาก /compare ชิ้นเดียว ใช้ engine เดียวกัน) เป็นแถวแรกไว้เทียบ
+      let self = null;
+      try {
+        const params = province ? { province } : {};
+        const c = await fetchCompare([product.id], params);
+        const it = (c.items || [])[0];
+        if (it) self = { shipping_fee: it.shipping?.fee, days_min: it.shipping?.days_min, days_max: it.shipping?.days_max, total: it.total, shipping: it.shipping };
+      } catch {}
+      const diffLabel = (o) => {
+        if (!self || self.total == null || o.total == null) return "";
+        const d = self.total - o.total;
+        if (d > 0) return `<div class="same-cheaper">ถูกกว่า ${formatBaht(d)}</div>`;
+        if (d < 0) return `<div class="order-line-meta">แพงกว่า ${formatBaht(-d)}</div>`;
+        return `<div class="order-line-meta">ราคาเท่ากัน</div>`;
+      };
+      const feeCell = (o) =>
+        `<td>${o.shipping_fee == null ? "—" : shippingFeeText({ fee: o.shipping_fee, free_reason: o.free_reason, free_over: o.free_over })}
+           ${o.days_min ? `<div class="order-line-meta">${o.days_min}${o.days_max && o.days_max !== o.days_min ? `–${o.days_max}` : ""} วัน</div>` : ""}</td>`;
+      box.innerHTML = `
+        <div class="review-section">
+          <h2 class="panel-title" style="margin-bottom: 4px;">ร้านอื่นที่ขายรุ่นนี้</h2>
+          <p class="form-hint" style="margin: 0 0 10px;">
+            สินค้ารหัสรุ่น/บาร์โค้ดเดียวกัน${province ? ` · ราคารวมค่าส่งไป${escapeHtml(province)}` : ""}</p>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>ร้าน</th><th>ราคา</th>${province ? "<th>ค่าส่ง</th><th>รวม</th>" : ""}<th></th></tr></thead>
+              <tbody>
+                ${self
+                  ? `<tr class="same-self">
+                      <td><b>ร้านนี้</b><div class="order-line-meta">${escapeHtml(product.shop_name || "")}</div></td>
+                      <td style="white-space: nowrap;">${formatBaht(product.price)}</td>
+                      ${province ? `${feeCell(self)}<td style="white-space: nowrap;"><b>${self.total == null ? "—" : formatBaht(self.total)}</b></td>` : ""}
+                      <td></td>
+                    </tr>`
+                  : ""}
+                ${list
+                  .map(
+                    (o) => `
+                  <tr>
+                    <td><a href="shop.html?id=${o.shop_id}" class="cmp-link">${escapeHtml(o.shop_name || "")}</a>
+                      ${o.shop_rating ? `<div class="order-line-meta">⭐ ${o.shop_rating}</div>` : ""}</td>
+                    <td style="white-space: nowrap;"><a href="product-detail.html?id=${o.product_id}">${formatBaht(o.price)}</a></td>
+                    ${province
+                      ? `${feeCell(o)}
+                         <td style="white-space: nowrap;"><b>${o.total == null ? "—" : formatBaht(o.total)}</b>${diffLabel(o)}</td>`
+                      : ""}
+                    <td style="white-space: nowrap;">${compareButtonHtml({ id: o.product_id, name: o.name || product.name, image: o.image || product.image, cover_url: o.cover_url, category_id: product.category_id })}</td>
+                  </tr>`
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
     }
 
     async function loadReviews(productId, product) {
@@ -225,6 +364,8 @@
         </div>`;
     }
 
+    // แชทรู้ว่ากำลังดูสินค้าชิ้นไหน (context_sku_id) — ไม่มีปุ่มลอย เข้าผ่านปุ่ม "ถามเกี่ยวกับสินค้านี้"
+    ShopChat.init({ launcher: false, contextSkuId: getProductIdFromUrl() });
     loadDetail();
   </script>
 </body>

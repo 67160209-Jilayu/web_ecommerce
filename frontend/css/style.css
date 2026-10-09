@@ -26,6 +26,11 @@
   --muted: #6b8298;
   --border: #cfe0ee;
 
+  /* คำเตือนระดับกลาง (ไม่ใช่ error) — ใช้ใน dashboard ราคาของผู้ขาย */
+  --warn: #8a5300;
+  --warn-bg: #fff3dc;
+  --warn-border: #f1d9a6;
+
   /* ช่องสี RGB สำหรับใช้กับ rgba() — ต้องตรงกับค่าด้านบน */
   --ink-rgb: 13, 31, 47;
   --sky-rgb: 234, 241, 248;
@@ -1635,4 +1640,1361 @@ a {
 
 .toast.error {
   background: var(--azure-dark);
+}
+
+/* ============================================================
+   ระบบราคา (เฟส 1): notice ราคาลดในตะกร้า · ป้าย % ส่วนลด · dashboard ราคาผู้ขาย
+   ============================================================ */
+
+/* จุดแจ้งที่ไอคอนตะกร้า เมื่อมี notice ราคาลดที่ยังไม่ได้อ่าน (ล็อกอินเท่านั้น) */
+.cart-dot {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--aqua-light);
+  box-shadow: 0 0 0 2px var(--deep);
+  animation: cart-dot-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes cart-dot-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+}
+
+/* แถบ notice ราคาลดบนหน้าตะกร้า */
+.price-notice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.price-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, var(--deep), var(--deep-2));
+  color: var(--sky);
+  border-left: 4px solid var(--aqua);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.price-notice-icon {
+  font-size: 1.2rem;
+}
+
+.price-notice strong {
+  color: var(--aqua-light);
+}
+
+.price-notice-name {
+  opacity: 0.8;
+  font-size: 0.8rem;
+}
+
+/* ราคาตอนใส่ตะกร้า (ขีดฆ่า) ในรายการตะกร้า เมื่อมี notice */
+.cart-item-was {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+  text-decoration: line-through;
+  margin-left: 6px;
+}
+
+/* ป้าย % ส่วนลด (แสดงเฉพาะเมื่อ API ส่ง discount_percent มา) */
+.discount-tag {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--deep);
+  background: var(--aqua-light);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.detail-price .discount-tag {
+  font-size: 0.85rem;
+}
+
+/* ช่องอ่านอย่างเดียวในฟอร์มสินค้า (ราคาก่อนลดที่ระบบคำนวณ) */
+.readonly-field {
+  padding: 11px 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  background: var(--sky-2);
+  color: var(--ink);
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+}
+
+/* dashboard ราคาผู้ขาย */
+.alert-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn-border);
+}
+
+.warn-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--warn);
+  font-size: 0.8rem;
+}
+
+.warn-list li + li {
+  margin-top: 3px;
+}
+
+.pill-warn {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn-border);
+  white-space: nowrap;
+}
+
+.pill-ok {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(var(--aqua-rgb), 0.15);
+  color: var(--azure-dark);
+  white-space: nowrap;
+}
+
+.cart-item-was-note {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+/* พรีวิวราคาที่ลูกค้าจะเห็น ในฟอร์มแก้ไขสินค้า */
+.price-preview {
+  margin-top: 6px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+}
+
+.price-preview .product-price {
+  display: inline;
+}
+
+/* ============================================================
+   เปรียบเทียบสินค้า (เฟส 2): ปุ่ม + เทียบ · ถาดลอย · ป้ายข้อมูลครบ · หน้าเทียบ
+   ============================================================ */
+
+.compare-btn {
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--azure);
+  background: var(--card);
+  color: var(--azure);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.compare-btn:hover {
+  background: rgba(var(--azure-rgb), 0.08);
+}
+
+.compare-btn.on {
+  background: var(--azure);
+  color: var(--sky);
+}
+
+/* ปุ่มบนการ์ด: มุมขวาบนของรูป */
+.product-thumb-wrap .compare-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  box-shadow: var(--shadow-sm);
+}
+
+.compare-btn-lg {
+  font-size: 0.85rem;
+  padding: 8px 16px;
+}
+
+.badge-spec-complete {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--azure-dark);
+  background: rgba(var(--azure-rgb), 0.1);
+  border: 1px solid rgba(var(--azure-rgb), 0.3);
+  border-radius: 3px;
+  padding: 1px 6px;
+  width: fit-content;
+}
+
+/* ถาดเทียบลอยด้านล่าง */
+.compare-tray {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 32px));
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, var(--deep), var(--deep-2));
+  color: var(--sky);
+  border-radius: 16px;
+  box-shadow: 0 0 0 2px var(--aqua), var(--shadow-md);
+  font-family: var(--font-body);
+  animation: tray-in 0.25s ease;
+}
+
+@keyframes tray-in {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+body.has-compare-tray {
+  padding-bottom: 96px;
+}
+
+.compare-tray-items {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.compare-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 48px;
+  padding: 4px 22px 4px 4px;
+  border-radius: 10px;
+  background: rgba(var(--sky-rgb), 0.08);
+}
+
+.compare-slot.empty {
+  justify-content: center;
+  padding: 4px;
+  border: 1.5px dashed rgba(var(--sky-rgb), 0.3);
+  background: none;
+  color: rgba(var(--sky-rgb), 0.4);
+}
+
+.compare-slot-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--sky);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+}
+
+.compare-slot-thumb .thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.compare-slot-name {
+  font-size: 0.72rem;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.compare-slot-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: rgba(var(--sky-rgb), 0.7);
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+.compare-slot-remove:hover {
+  background: rgba(var(--sky-rgb), 0.15);
+  color: var(--sky);
+}
+
+.compare-tray-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.compare-tray .compare-clear {
+  color: var(--sky);
+  border-color: rgba(var(--sky-rgb), 0.3);
+  padding: 6px 12px;
+}
+
+.compare-hint {
+  font-size: 0.72rem;
+  color: rgba(var(--sky-rgb), 0.7);
+  max-width: 90px;
+  line-height: 1.3;
+}
+
+@media (max-width: 700px) {
+  .compare-tray {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    bottom: 8px;
+  }
+  .compare-slot {
+    height: 44px;
+    padding-right: 4px;
+    justify-content: center;
+  }
+  .compare-slot-name {
+    display: none;
+  }
+  .compare-tray-actions {
+    justify-content: flex-end;
+  }
+  .compare-hint {
+    max-width: none;
+  }
+  body.has-compare-tray {
+    padding-bottom: 140px;
+  }
+}
+
+/* ---------- หน้าเทียบ ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.cmp-summary {
+  background: linear-gradient(135deg, var(--deep), var(--deep-2));
+  color: var(--sky);
+  border-left: 4px solid var(--aqua);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  margin: 0 0 14px;
+}
+
+.cmp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin-bottom: 14px;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+}
+
+.switch-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.switch-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--azure);
+}
+
+.cmp-province {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cmp-province select {
+  padding: 7px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  font-family: var(--font-body);
+  color: var(--ink);
+}
+
+.cmp-wrap {
+  --label-w: 170px;
+  --col-w: minmax(190px, 1fr);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+  /* ไม่ใส่ overflow:hidden เพราะจะทำให้หัวตาราง sticky ไม่ติดจอ */
+}
+
+.cmp-sticky {
+  position: sticky;
+  top: var(--topbar-h, 72px);
+  z-index: 5;
+  background: var(--card);
+  border-radius: 18px 18px 0 0;
+  border-bottom: 2px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cmp-sticky::-webkit-scrollbar {
+  display: none;
+}
+
+.cmp-scroll {
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+
+.cmp-row {
+  display: grid;
+  grid-template-columns: var(--label-w) 1fr;
+  min-width: max-content;
+}
+
+.cmp-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--n), var(--col-w));
+}
+
+.cmp-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: inherit;
+  background-color: var(--card);
+  padding: 10px 14px;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+}
+
+.cmp-unit {
+  font-weight: 400;
+  margin-left: 3px;
+}
+
+.cmp-cell {
+  position: relative; /* ให้ .sr-only ข้างในถูกตัดโดย scroll container ไม่ล้นทั้งหน้า */
+  padding: 10px 14px;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  color: var(--ink);
+  scroll-snap-align: start;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* แถวสลับสี ให้สายตาไล่ได้ */
+.cmp-group .cmp-row:nth-of-type(even),
+.cmp-group .cmp-row:nth-of-type(even) .cmp-label {
+  background-color: var(--sky);
+}
+
+.cmp-cell.best {
+  background: rgba(var(--aqua-rgb), 0.16);
+  box-shadow: inset 3px 0 0 var(--aqua);
+  font-weight: 700;
+}
+
+.cmp-cell.best::after {
+  content: " ▲";
+  font-size: 0.65rem;
+  color: var(--azure);
+}
+
+.cmp-group-title {
+  position: sticky;
+  left: 0;
+  width: fit-content;
+  padding: 14px 14px 6px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.cmp-missing {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.cmp-sub {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.cmp-sub-inline {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+.cmp-link {
+  color: var(--azure);
+  font-weight: 600;
+}
+
+.cmp-head-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+}
+
+.cmp-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--sky-2), var(--sky));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+}
+
+.cmp-thumb .thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cmp-name {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.cmp-head-price {
+  font-size: 1rem;
+}
+
+.cmp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cmp-badge {
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--deep);
+  background: var(--aqua-light);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.cmp-cart-btn {
+  margin-top: auto;
+  width: fit-content;
+}
+
+.cmp-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cmp-remove:hover {
+  color: var(--azure);
+  border-color: var(--azure);
+}
+
+.cmp-add {
+  justify-content: center;
+  align-items: center;
+}
+
+.cmp-add-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 140px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+}
+
+.cmp-add-link span {
+  font-size: 1.6rem;
+}
+
+.cmp-add-link:hover {
+  border-color: var(--azure);
+  color: var(--azure);
+}
+
+/* มือถือ: เห็นทีละ 2 คอลัมน์ ปัดดูชิ้นที่ 3–4; ชื่อแถวอยู่บรรทัดบน */
+@media (max-width: 700px) {
+  .cmp-wrap {
+    --col-w: calc((100vw - 42px) / 2);
+  }
+  .cmp-row {
+    grid-template-columns: 1fr;
+  }
+  .cmp-label {
+    width: calc(100vw - 42px);
+    padding: 8px 12px 0;
+    font-size: 0.75rem;
+  }
+  .cmp-head .cmp-label {
+    display: none;
+  }
+  .cmp-scroll {
+    scroll-snap-type: x mandatory;
+  }
+  .cmp-cell {
+    padding: 6px 12px 10px;
+  }
+  .cmp-head-cell {
+    padding: 10px;
+  }
+  .cmp-thumb {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+/* หน้าสินค้า: ปุ่มเทียบ + สเปก */
+.detail-compare-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.spec-brand {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.spec-group + .spec-group {
+  margin-top: 12px;
+}
+
+.spec-group-title {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--azure-dark);
+  margin-bottom: 4px;
+}
+
+.spec-list {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) 1fr;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+}
+
+.spec-list dt,
+.spec-list dd {
+  margin: 0;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.spec-list dt {
+  color: var(--muted);
+}
+
+/* ฟอร์มสินค้า: กลุ่มสเปก + ช่องตัวเลขที่ล็อกหน่วย */
+.spec-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 16px 14px;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+
+.spec-fieldset legend {
+  font-family: var(--font-display);
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.unit-input {
+  display: flex;
+  align-items: stretch;
+}
+
+.unit-input input {
+  flex: 1;
+  min-width: 0;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.unit-suffix {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1.5px solid var(--border);
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  background: var(--sky-2);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.spec-suggest ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+
+.spec-suggest li + li {
+  margin-top: 4px;
+}
+
+.btn-xs {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  margin-left: 4px;
+}
+
+/* ตั้งค่าค่าจัดส่งของร้าน */
+.ship-regions {
+  margin-top: 6px;
+  font-family: var(--font-body);
+}
+
+.ship-regions summary {
+  cursor: pointer;
+  color: var(--azure);
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.table-input {
+  width: 90px;
+  padding: 6px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--sky);
+  font-family: var(--font-body);
+  color: var(--ink);
+}
+
+/* ใน scroll container แนวนอน absolute + clip ยังดันความกว้างหน้าได้ → ใช้แบบ inline แทน */
+.cmp-cell .sr-only {
+  position: static;
+  display: inline-block;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  vertical-align: top;
+}
+
+/* หัวคอลัมน์ติดจอแบบกะทัดรัด: รูปเล็ก + ชื่อ + ราคา เรียงแนวนอน */
+.cmp-head-cell {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 34px 10px 12px;
+}
+
+.cmp-head-cell .cmp-thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  font-size: 1.6rem;
+}
+
+.cmp-head-text {
+  min-width: 0;
+}
+
+.cmp-actions .cmp-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.cmp-add-link {
+  min-height: 52px;
+  flex-direction: row;
+}
+
+.cmp-add-link span {
+  font-size: 1.2rem;
+}
+
+@media (max-width: 700px) {
+  .cmp-head-cell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 8px 30px 8px 10px;
+  }
+  .cmp-head-cell .cmp-thumb {
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
+    border-radius: 8px;
+  }
+  .cmp-name {
+    font-size: 0.8rem;
+  }
+  .cmp-head-price {
+    font-size: 0.9rem;
+  }
+  .cmp-actions .cmp-label {
+    display: none;
+  }
+}
+
+/* ความกว้างแถวกำหนดตายตัว (ไม่ใช้ max-content) ให้คอลัมน์หัวตารางกับเนื้อตารางตรงกันเสมอ */
+.cmp-row {
+  min-width: 0;
+  width: max(100%, calc(var(--label-w) + var(--n) * 190px));
+}
+
+.cmp-cells > * {
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .cmp-row {
+    width: calc(var(--n) * (100vw - 42px) / 2);
+  }
+}
+
+.cmp-badge-more {
+  border: none;
+  cursor: pointer;
+  background: var(--sky-2);
+  color: var(--azure-dark);
+  font-family: var(--font-body);
+}
+
+.same-self td {
+  background: rgba(var(--aqua-rgb), 0.08);
+}
+
+.same-cheaper {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--azure-dark);
+}
+
+.region-provinces {
+  max-width: 320px;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--muted);
+  white-space: normal;
+}
+
+/* ============================================================
+   แชทช่วยช้อป (เฟส 3)
+   ============================================================ */
+.chat-launcher {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--azure), var(--azure-dark));
+  color: var(--sky);
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px var(--aqua), var(--shadow-md);
+  transition: transform 0.15s ease;
+}
+
+.chat-launcher:hover {
+  transform: translateY(-2px);
+}
+
+.chat-launcher-hidden,
+.chat-root.open .chat-launcher {
+  display: none;
+}
+
+/* มีถาดเทียบอยู่ด้านล่าง → ยกปุ่มแชทขึ้นไม่ให้ทับ */
+body.has-compare-tray .chat-launcher {
+  bottom: 100px;
+}
+
+.chat-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 50;
+  width: min(400px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 110px));
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 0 0 2px var(--aqua), var(--shadow-md);
+  overflow: hidden;
+  font-family: var(--font-body);
+}
+
+.chat-panel[hidden] {
+  display: none;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, var(--deep), var(--deep-2));
+  color: var(--sky);
+}
+
+.chat-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.chat-sub {
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+.chat-head-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-icon-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(var(--sky-rgb), 0.1);
+  color: var(--sky);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.chat-icon-btn:hover {
+  background: rgba(var(--sky-rgb), 0.22);
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--sky);
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.chat-msg.user {
+  align-items: flex-end;
+}
+
+.chat-bubble {
+  max-width: 88%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+
+.chat-msg.user .chat-bubble {
+  background: var(--azure);
+  border-color: var(--azure);
+  color: var(--sky);
+  border-bottom-right-radius: 4px;
+}
+
+.chat-msg.model .chat-bubble {
+  border-bottom-left-radius: 4px;
+}
+
+.chat-msg.system {
+  align-self: center;
+  max-width: 92%;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.chat-typing {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.chat-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: chat-dot 1s infinite ease-in-out;
+}
+
+.chat-typing i:nth-child(2) { animation-delay: 0.15s; }
+.chat-typing i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes chat-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+
+.chat-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-card {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.chat-card-thumb {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--sky-2), var(--sky));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+}
+
+.chat-card-thumb .thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-card-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.chat-card-price {
+  font-size: 0.95rem;
+}
+
+.chat-card-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.chat-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.btn.btn-xs {
+  padding: 4px 12px;
+  font-size: 0.72rem;
+  margin-left: 0;
+}
+
+.chat-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.chat-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-link {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--azure);
+}
+
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-chip {
+  padding: 6px 12px;
+  border: 1.5px solid var(--azure);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--azure);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-chip:hover {
+  background: rgba(var(--azure-rgb), 0.08);
+}
+
+.chat-guided-q {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.chat-feedback {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-fb {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.chat-fb.on {
+  opacity: 1;
+  border-color: var(--azure);
+  background: rgba(var(--azure-rgb), 0.1);
+}
+
+.chat-policy-link {
+  font-size: 0.74rem;
+}
+
+.chat-policy-link a {
+  color: var(--azure);
+  text-decoration: underline;
+}
+
+.chat-form {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px 8px;
+  background: var(--card);
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.chat-input {
+  flex: 1;
+  resize: none;
+  max-height: 120px;
+  padding: 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--sky);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--azure);
+  box-shadow: 0 0 0 3px rgba(var(--azure-rgb), 0.12);
+}
+
+.chat-send {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--azure);
+  color: var(--sky);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.chat-send:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.chat-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.chat-disclaimer {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.chat-counter {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.chat-counter.over {
+  color: #8c1f2c;
+  font-weight: 700;
+}
+
+/* ปุ่มเข้าแชทในหน้า (หน้าสินค้า/หน้าเทียบ) */
+.chat-entry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 700px) {
+  .chat-launcher {
+    right: 14px;
+    bottom: 14px;
+    padding: 12px 14px;
+  }
+  .chat-launcher-text {
+    display: none;
+  }
+  body.has-compare-tray .chat-launcher {
+    bottom: 150px;
+  }
+  /* มือถือ: เต็มจอ */
+  .chat-panel {
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+  .chat-input {
+    font-size: 16px; /* กัน iOS ซูมเมื่อแตะช่องพิมพ์ */
+  }
 }

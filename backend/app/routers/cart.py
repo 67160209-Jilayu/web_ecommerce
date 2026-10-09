@@ -5,7 +5,7 @@
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
 from app import crud, models, schemas
@@ -16,9 +16,16 @@ router = APIRouter(prefix="/cart", tags=["cart"])
 
 
 @router.get("/{token}", response_model=schemas.CartRead)
-def get_cart(token: str, session: Session = Depends(get_session)):
-    """คืนตะกร้าตาม token — ถ้ายังไม่เคยเพิ่มสินค้าเลยจะได้ตะกร้าว่าง ไม่ error"""
-    return crud.get_cart(session, token)
+def get_cart(
+    token: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+):
+    """คืนตะกร้าตาม token — ถ้ายังไม่เคยเพิ่มสินค้าเลยจะได้ตะกร้าว่าง ไม่ error
+
+    ถ้าส่ง Authorization มาและเป็นเจ้าของตะกร้า จะได้ `notices` ราคาลดที่ยังไม่อ่านมาด้วย
+    """
+    return crud.get_cart(session, token, viewer=current_user)
 
 
 @router.post("/{token}/items", response_model=schemas.CartRead, status_code=201)
@@ -41,19 +48,25 @@ def update_item(
     product_id: int,
     data: schemas.CartItemUpdate,
     session: Session = Depends(get_session),
+    current_user: Optional[models.User] = Depends(get_optional_user),
 ):
     """ปรับจำนวนสินค้าในตะกร้า (ตั้งเป็น 0 หรือน้อยกว่า = ลบออกจากตะกร้า)"""
     try:
-        return crud.update_cart_item(session, token, product_id, data.quantity)
+        return crud.update_cart_item(session, token, product_id, data.quantity, current_user)
     except ValueError as err:
         raise HTTPException(status_code=404, detail=str(err))
 
 
 @router.delete("/{token}/items/{product_id}", response_model=schemas.CartRead)
-def remove_item(token: str, product_id: int, session: Session = Depends(get_session)):
-    """ลบสินค้าออกจากตะกร้า"""
+def remove_item(
+    token: str,
+    product_id: int,
+    session: Session = Depends(get_session),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+):
+    """ลบสินค้าออกจากตะกร้า (notice ราคาลดของรายการนี้หายไปด้วย)"""
     try:
-        return crud.remove_cart_item(session, token, product_id)
+        return crud.remove_cart_item(session, token, product_id, current_user)
     except ValueError as err:
         raise HTTPException(status_code=404, detail=str(err))
 
@@ -66,3 +79,18 @@ def merge_cart(
 ):
     """ผูกตะกร้า guest เข้ากับบัญชีที่เพิ่งล็อกอิน (รวมกับตะกร้าเดิมของบัญชีถ้ามี)"""
     return crud.merge_cart_to_user(session, token, current_user)
+
+
+
+@router.get("/{token}/shipping-quote", response_model=schemas.ShippingQuote)
+def shipping_quote(
+    token: str,
+    province: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+):
+    """ค่าส่งของตะกร้าแยกตามร้าน — คำนวณแบบเดียวกับตอน checkout จริง"""
+    try:
+        return crud.cart_shipping_quote(session, token, province, current_user)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))

@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261004b" />
 </head>
 <body>
   <header class="topbar">
@@ -29,7 +29,7 @@
     <div id="checkout-body"><p class="state-message">กำลังโหลด...</p></div>
   </main>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261004b"></script>
   <script>
     const PAY_OPTIONS = [
       { value: "COD", icon: "💵", label: "เก็บเงินปลายทาง", desc: "จ่ายเงินสดกับพนักงานส่งของตอนรับสินค้า" },
@@ -37,11 +37,14 @@
       { value: "CARD", icon: "💳", label: "บัตรเครดิต/เดบิต", desc: "ตัดบัตรทันที (โหมดทดสอบ ไม่มีการเรียกเก็บเงินจริง)" },
     ];
 
-    // ต้องตรงกับ SHIPPING_FEE / FREE_SHIPPING_MIN ใน backend/app/crud.py
+    // ค่าเริ่มต้นของร้าน ใช้ประมาณการเฉพาะตอนดึงค่าส่งจริงจาก backend ไม่ได้
     const SHIPPING_FEE = 40;
     const FREE_SHIPPING_MIN = 500;
 
     let cartData = null;
+    let provinces = [];
+    let province = "";
+    let quote = null; // {shops:[{shop_id, fee, days_min, days_max}]} จาก /cart/{token}/shipping-quote
 
     async function loadCheckout() {
       const body = document.getElementById("checkout-body");
@@ -60,11 +63,18 @@
 
       if (!cartData.items.length) {
         body.innerHTML = `<p class="state-message">ตะกร้าว่าง —
-          <a href="../index.html" style="color: var(--chili);">ไปเลือกซื้อสินค้าก่อน</a></p>`;
+          <a href="../index.html" style="color: var(--azure);">ไปเลือกซื้อสินค้าก่อน</a></p>`;
         return;
       }
 
-      const user = await fetchMe();
+      const [user, provList, savedProvince] = await Promise.all([
+        fetchMe(),
+        fetchProvinces().catch(() => []),
+        getBuyerProvince(),
+      ]);
+      provinces = provList || [];
+      province = savedProvince;
+      await loadQuote();
 
       body.innerHTML = `
         <div class="checkout-layout">
@@ -86,7 +96,15 @@
                 <div class="form-group">
                   <label for="address">ที่อยู่จัดส่ง *</label>
                   <textarea id="address" rows="3" required
-                    placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"></textarea>
+                    placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ รหัสไปรษณีย์"></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="province">จังหวัด *</label>
+                  <select id="province" ${provinces.length ? "required" : "disabled"}>
+                    <option value="">— เลือกจังหวัด —</option>
+                    ${provinceOptionsHtml(provinces, province)}
+                  </select>
+                  <div class="form-hint">ใช้คำนวณค่าส่งและระยะเวลาจัดส่งของแต่ละร้าน</div>
                 </div>
                 <div class="form-group">
                   <label for="note">หมายเหตุถึงร้านค้า (ไม่บังคับ)</label>
@@ -112,18 +130,18 @@
 
             <div class="panel">
               <h2 class="panel-title" style="margin-bottom:16px;">สรุปรายการ (แยกตามร้าน)</h2>
-              ${renderShopGroups()}
+              <div id="shop-groups">${renderShopGroups()}</div>
             </div>
           </div>
 
           <div class="summary-panel">
             <h2 style="font-family: var(--font-display); margin: 0 0 14px; font-size: 1.15rem;">ยอดที่ต้องชำระ</h2>
-            ${renderSummaryRows()}
+            <div id="summary-rows">${renderSummaryRows()}</div>
             <button class="btn btn-primary" id="place-order-btn" style="width: 100%; margin-top: 16px;">
               ยืนยันคำสั่งซื้อ
             </button>
-            <p style="font-size: 0.74rem; opacity: 0.65; margin: 10px 0 0; text-align: center;">
-              ค่าส่ง ฿40/ร้าน · ซื้อครบ ฿500 ต่อร้าน ส่งฟรี
+            <p style="font-size: 0.74rem; opacity: 0.65; margin: 10px 0 0; text-align: center;" id="ship-note">
+              ${shipNote()}
             </p>
           </div>
         </div>`;
@@ -137,6 +155,27 @@
       });
 
       document.getElementById("place-order-btn").addEventListener("click", placeOrder);
+      document.getElementById("province").addEventListener("change", async (e) => {
+        province = e.target.value;
+        setBuyerProvince(province);
+        await loadQuote();
+        document.getElementById("shop-groups").innerHTML = renderShopGroups();
+        document.getElementById("summary-rows").innerHTML = renderSummaryRows();
+        document.getElementById("ship-note").innerHTML = shipNote();
+      });
+    }
+
+    async function loadQuote() {
+      try {
+        quote = await fetchShippingQuote(province);
+      } catch {
+        quote = null; // ยังไม่มี endpoint / เรียกไม่สำเร็จ → ใช้ค่าประมาณ
+      }
+    }
+
+    function shipNote() {
+      if (!quote) return "ค่าส่งเป็นค่าประมาณ (฿40/ร้าน · ครบ ฿500 ต่อร้านส่งฟรี) ยอดจริงคำนวณตอนยืนยัน";
+      return province ? `ค่าส่งตามอัตราของแต่ละร้านไป${escapeHtml(province)}` : "เลือกจังหวัดเพื่อดูค่าส่งจริงของแต่ละร้าน";
     }
 
     /** จัดกลุ่มรายการในตะกร้าตามร้าน + คำนวณค่าส่งแบบเดียวกับ backend เพื่อให้ตัวเลขตรงกัน */
@@ -147,8 +186,10 @@
         groups[key] = groups[key] || { name: item.shop_name || "ไม่ระบุร้าน", items: [] };
         groups[key].items.push(item);
       });
-      return Object.values(groups).map((g) => {
+      return Object.entries(groups).map(([shopId, g]) => {
         const subtotal = g.items.reduce((s, i) => s + i.price * i.quantity, 0);
+        const q = (quote?.shops || []).find((x) => String(x.shop_id) === String(shopId));
+        if (q) return { ...g, subtotal, shipping: Number(q.fee) || 0, days_min: q.days_min, days_max: q.days_max };
         const allFree = g.items.every((i) => i.free_shipping);
         const shipping = allFree || subtotal >= FREE_SHIPPING_MIN ? 0 : SHIPPING_FEE;
         return { ...g, subtotal, shipping };
@@ -175,7 +216,8 @@
             )
             .join("")}
           <div class="order-line-meta" style="padding-top: 10px; text-align: right;">
-            ค่าจัดส่ง: ${g.shipping === 0 ? "<b style='color:var(--chili)'>ฟรี</b>" : formatBaht(g.shipping)}
+            ค่าจัดส่ง: ${g.shipping === 0 ? "<b style='color:var(--azure)'>ฟรี</b>" : formatBaht(g.shipping)}
+            ${g.days_min ? ` · ถึงใน ${g.days_min}${g.days_max && g.days_max !== g.days_min ? `–${g.days_max}` : ""} วัน` : ""}
           </div>
         </div>`
         )
@@ -204,10 +246,11 @@
         address: document.getElementById("address").value.trim(),
         note: document.getElementById("note").value.trim(),
         payment_method: document.querySelector('input[name="payment"]:checked').value,
+        province: document.getElementById("province").value || null,
       };
 
-      if (!payload.recipient_name || !payload.recipient_phone || !payload.address) {
-        errorEl.textContent = "กรุณากรอกชื่อผู้รับ เบอร์โทร และที่อยู่จัดส่งให้ครบถ้วน";
+      if (!payload.recipient_name || !payload.recipient_phone || !payload.address || (provinces.length && !payload.province)) {
+        errorEl.textContent = "กรุณากรอกชื่อผู้รับ เบอร์โทร ที่อยู่ และจังหวัดให้ครบถ้วน";
         errorEl.style.display = "block";
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;

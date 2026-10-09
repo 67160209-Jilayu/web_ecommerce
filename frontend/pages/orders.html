@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261004b" />
 </head>
 <body>
   <header class="topbar">
@@ -31,7 +31,7 @@
 
   <div id="modal-root"></div>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261004b"></script>
   <script>
     const TABS = [
       { key: "ALL", label: "ทั้งหมด" },
@@ -105,7 +105,7 @@
 
       if (!orders.length) {
         body.innerHTML = `<p class="state-message">ยังไม่มีคำสั่งซื้อในหมวดนี้ —
-          <a href="../index.html" style="color: var(--chili);">ไปเลือกซื้อสินค้า</a></p>`;
+          <a href="../index.html" style="color: var(--azure);">ไปเลือกซื้อสินค้า</a></p>`;
         return;
       }
 
@@ -132,7 +132,7 @@
                 </div>
                 <div class="order-line-meta">
                   ${formatBaht(i.product_price)} × ${i.quantity}
-                  ${i.reviewed ? ' · <span style="color: var(--marigold)">รีวิวแล้ว ★</span>' : ""}
+                  ${i.reviewed ? ' · <span style="color: var(--aqua)">รีวิวแล้ว ★</span>' : ""}
                 </div>
               </div>
               <div class="cart-item-price">${formatBaht(i.subtotal)}</div>

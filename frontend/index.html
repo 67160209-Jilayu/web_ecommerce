@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20261004b" />
 </head>
 <body>
   <header class="topbar">
@@ -63,7 +63,8 @@
     </div>
   </main>
 
-  <script src="js/api.js"></script>
+  <script src="js/api.js?v=20261004b"></script>
+  <script src="js/chat.js?v=20261004b"></script>
   <script>
     const grid = document.getElementById("product-grid");
     const pageTitle = document.getElementById("page-title");
@@ -129,13 +130,14 @@
             <div class="product-thumb-wrap">
               <div class="product-thumb">${productThumb(p)}</div>
               ${outOfStock ? `<div class="badge-out-of-stock">สินค้าหมด</div>` : ""}
+              ${compareButtonHtml(p)}
             </div>
             <div class="product-info">
               ${p.free_shipping ? `<span class="badge-free-shipping">ส่งฟรี</span>` : ""}
+              ${specCompleteBadge(p)}
               <div class="product-name">${escapeHtml(p.name)}</div>
               <div class="product-price">
-                ${formatBaht(p.price)}
-                ${p.original_price ? `<span class="original">${formatBaht(p.original_price)}</span>` : ""}
+                ${priceHtml(p)}
               </div>
               <div class="product-meta">
                 <span>${p.review_count > 0 ? `⭐ ${p.rating}` : "ยังไม่มีรีวิว"}</span>
@@ -186,6 +188,7 @@
     });
 
     loadProducts();
+    ShopChat.init({ launcher: true });
   </script>
 </body>
 </html>
