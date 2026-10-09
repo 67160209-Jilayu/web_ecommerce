@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from sqlalchemy.orm import object_session
+from sqlalchemy.orm import object_session, selectinload
 from sqlmodel import Session, select
 
 from app import models, pricing, schemas, shipping, specs
@@ -162,7 +162,8 @@ def _spec_fields(product: models.Product) -> dict:
         return {}
     values = specs.values_of(session, product.id)
     return {
-        "attributes": specs.attribute_reads(session, product),
+        # ส่ง values ที่ดึงมาแล้วต่อให้ทั้งสองฟังก์ชัน กันการ query ซ้ำ 2 รอบต่อสินค้า 1 ชิ้น
+        "attributes": specs.attribute_reads(session, product, values),
         "spec_complete": specs.is_complete(session, product, values),
     }
 
@@ -182,7 +183,17 @@ def list_products(
     sort: str = "latest",
 ) -> List[schemas.ProductRead]:
     """คืนสินค้าที่ยังเปิดขาย พร้อมตัวกรอง/เรียงลำดับ"""
-    stmt = select(models.Product).where(models.Product.is_active == True)  # noqa: E712
+    # ดึงร้าน/หมวด/รูป มาพร้อมกันในรอบเดียว แทนที่จะ lazy load ทีละชิ้น
+    # (lazy load = 3 query ต่อสินค้า 1 ชิ้น ซึ่งช้ามากเมื่อฐานข้อมูลอยู่คนละทวีป)
+    stmt = (
+        select(models.Product)
+        .options(
+            selectinload(models.Product.shop),
+            selectinload(models.Product.category),
+            selectinload(models.Product.media),
+        )
+        .where(models.Product.is_active == True)  # noqa: E712
+    )
 
     if category_id is not None:
         stmt = stmt.where(models.Product.category_id == category_id)
@@ -213,6 +224,12 @@ def list_products(
             p for p in products
             if keyword in p.name.lower() or keyword in (p.description or "").lower()
         ]
+
+    # ดึงราคาอ้างอิงและค่าสเปกของทุกชิ้นมาล่วงหน้าเป็นชุดเดียว
+    # ไม่งั้น _to_product_read จะยิง query ละ 2 รอบต่อสินค้าหนึ่งชิ้น
+    ids = [p.id for p in products if p.id]
+    pricing.prefetch_price_refs(session, ids)
+    specs.prefetch_values(session, ids)
 
     reads = [_to_product_read(p) for p in products]
     if sort not in ("price_asc", "price_desc", "popular", "rating"):

@@ -1849,10 +1849,6 @@ a {
   box-shadow: var(--shadow-sm);
 }
 
-.compare-btn-lg {
-  font-size: var(--fs-sm);
-  padding: 8px 16px;
-}
 
 .badge-spec-complete {
   display: inline-block;

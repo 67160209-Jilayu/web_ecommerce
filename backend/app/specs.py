@@ -143,21 +143,60 @@ def options_of(attr: models.CategoryAttribute) -> Optional[List[str]]:
 
 
 def template(session: Session, category_id: Optional[int]) -> List[models.CategoryAttribute]:
+    """แม่แบบสเปกของหมวด — cache ไว้ต่อ 1 request
+
+    หน้ารายการสินค้าเรียกฟังก์ชันนี้ซ้ำทุกชิ้น ทั้งที่สินค้าหมวดเดียวกันได้ผลเหมือนกันเสมอ
+    ถ้าไม่ cache จะกลายเป็น query ละหนึ่งรอบต่อสินค้าหนึ่งชิ้น ซึ่งช้ามากเมื่อฐานข้อมูลอยู่ไกล
+    (session.info มีอายุเท่ากับ 1 request เพราะ get_session เปิด session ใหม่ทุกครั้ง)
+    """
     if category_id is None:
         return []
-    return list(session.exec(
-        select(models.CategoryAttribute)
-        .where(models.CategoryAttribute.category_id == category_id)
-        .order_by(models.CategoryAttribute.sort)
-    ).all())
+    cache = session.info.setdefault("_spec_template_cache", {})
+    if category_id not in cache:
+        cache[category_id] = list(session.exec(
+            select(models.CategoryAttribute)
+            .where(models.CategoryAttribute.category_id == category_id)
+            .order_by(models.CategoryAttribute.sort)
+        ).all())
+    return cache[category_id]
+
+
+VALUES_CACHE_KEY = "_spec_values_cache"
 
 
 def values_of(session: Session, product_id: int) -> Dict[str, models.ProductAttributeValue]:
+    cached = session.info.get(VALUES_CACHE_KEY)
+    if cached is not None and product_id in cached:
+        return cached[product_id]
     return {
         v.key: v for v in session.exec(
             select(models.ProductAttributeValue).where(models.ProductAttributeValue.product_id == product_id)
         ).all()
     }
+
+
+def prefetch_values(session: Session, product_ids: list) -> None:
+    """ดึงค่าสเปกของสินค้าหลายชิ้นในรอบเดียว แล้วพักไว้ให้ values_of ใช้ต่อ
+
+    หน้ารายการสินค้าเรียก values_of ทีละชิ้น ซึ่งกลายเป็น query ละรอบต่อสินค้าหนึ่งชิ้น
+    cache อยู่บน session จึงมีอายุแค่ 1 request และถูกล้างทุกครั้งที่มีการแก้ค่าสเปก
+    """
+    if not product_ids:
+        return
+    bucket: Dict[int, Dict[str, models.ProductAttributeValue]] = {pid: {} for pid in product_ids}
+    rows = session.exec(
+        select(models.ProductAttributeValue).where(
+            models.ProductAttributeValue.product_id.in_(product_ids)
+        )
+    ).all()
+    for v in rows:
+        bucket.setdefault(v.product_id, {})[v.key] = v
+    session.info[VALUES_CACHE_KEY] = bucket
+
+
+def clear_values_cache(session: Session) -> None:
+    """ต้องเรียกหลังแก้ค่าสเปก ไม่งั้นผู้เรียกถัดไปในรอบเดียวกันจะได้ค่าเก่า"""
+    session.info.pop(VALUES_CACHE_KEY, None)
 
 
 def _fmt_num(x: float) -> str:
@@ -239,6 +278,7 @@ def validate_values(
 
 def replace_values(session: Session, product: models.Product, clean: List[dict], source: str = "seller") -> None:
     """แทนค่าสเปกทั้งชุด (ไม่ commit)"""
+    clear_values_cache(session)
     for old in values_of(session, product.id).values():
         session.delete(old)
     session.flush()
@@ -248,6 +288,7 @@ def replace_values(session: Session, product: models.Product, clean: List[dict],
 
 def drop_values_not_in_template(session: Session, product: models.Product) -> None:
     """เปลี่ยนหมวดแล้ว → ลบสเปกที่ไม่อยู่ในแม่แบบใหม่ (ไม่ commit)"""
+    clear_values_cache(session)
     keys = {a.key for a in template(session, product.category_id)}
     for v in values_of(session, product.id).values():
         if v.key not in keys:
@@ -263,8 +304,11 @@ def is_complete(session: Session, product: models.Product, values: Optional[dict
     return all(a.key in values for a in tmpl if a.required)
 
 
-def attribute_reads(session: Session, product: models.Product) -> List[dict]:
-    vals = values_of(session, product.id)
+def attribute_reads(
+    session: Session, product: models.Product, values: Optional[dict] = None
+) -> List[dict]:
+    """ผู้เรียกที่ดึง values มาแล้วให้ส่งเข้ามาด้วย จะได้ไม่ query ซ้ำ"""
+    vals = values if values is not None else values_of(session, product.id)
     out = []
     for a in template(session, product.category_id):
         v = vals.get(a.key)

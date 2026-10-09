@@ -237,6 +237,7 @@ def recompute_price_ref(
     ref.price_since = since
     ref.updated_at = _now(now)
     session.add(ref)
+    clear_price_ref_cache(session)   # ค่าใน cache ของ request นี้ล้าสมัยแล้ว
     return ref
 
 
@@ -245,9 +246,40 @@ def history(session: Session, sku_id: int) -> List[models.SkuPriceHistory]:
     return _history(session, sku_id)
 
 
+REFS_CACHE_KEY = "_price_ref_cache"
+
+
 def get_price_ref(product: models.Product) -> Optional[models.SkuPriceRef]:
     s = object_session(product)
-    return s.get(models.SkuPriceRef, product.id) if s is not None and product.id else None
+    if s is None or not product.id:
+        return None
+    cached = s.info.get(REFS_CACHE_KEY)
+    if cached is not None and product.id in cached:
+        return cached[product.id]
+    return s.get(models.SkuPriceRef, product.id)
+
+
+def prefetch_price_refs(session: Session, product_ids: list) -> None:
+    """ดึงราคาอ้างอิงของสินค้าหลายชิ้นมาในรอบเดียว
+
+    ต้องจำ "สินค้าที่ไม่มีราคาอ้างอิง" ไว้ด้วย ไม่งั้น session.get() จะยังยิง query
+    ทีละชิ้นเพื่อยืนยันว่าไม่มีจริง ซึ่งเป็นกรณีที่พบบ่อยที่สุด (สินค้าใหม่ยังไม่มี ref)
+    cache อยู่บน session จึงมีอายุแค่ 1 request
+    """
+    if not product_ids:
+        return
+    found = {
+        r.sku_id: r
+        for r in session.exec(
+            select(models.SkuPriceRef).where(models.SkuPriceRef.sku_id.in_(product_ids))
+        ).all()
+    }
+    session.info[REFS_CACHE_KEY] = {pid: found.get(pid) for pid in product_ids}
+
+
+def clear_price_ref_cache(session: Session) -> None:
+    """ต้องเรียกหลังสร้าง/แก้ราคาอ้างอิง ไม่งั้นผู้เรียกถัดไปในรอบเดียวกันจะได้ค่าเก่า"""
+    session.info.pop(REFS_CACHE_KEY, None)
 
 
 class PriceDisplay:

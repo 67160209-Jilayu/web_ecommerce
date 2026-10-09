@@ -19,6 +19,9 @@ db_data/
 # Claude Code local session settings (เครื่องใครเครื่องมัน ไม่ commit)
 .claude/settings.local.json
 
+# ไฟล์ที่ผู้ขายอัปโหลด (เก็บใน docker volume ไม่ commit)
+backend/uploads/
+
 # รันในเครื่องโดยไม่ใช้ Docker (SQLite + ไฟล์อัปโหลด)
 *.db
 backend/uploads/
