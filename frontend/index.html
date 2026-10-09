@@ -10,18 +10,20 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="index.html" class="logo">🛒 ShopMarket</a>
     <form class="search-bar" id="search-form">
-      <input type="text" id="search-input" placeholder="ค้นหาสินค้า เช่น หม้อหุงข้าว, หูฟัง..." autocomplete="off" />
+      <input type="search" id="search-input" aria-label="ค้นหาสินค้า" placeholder="ค้นหาสินค้า เช่น หม้อหุงข้าว, หูฟัง..." autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
     <span id="auth-status" data-base=""></span>
-    <a href="pages/cart.html" class="cart-link">
-      🛍️
+    <a href="pages/cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
@@ -35,14 +37,16 @@
     </div>
   </section>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <div class="category-bar" id="category-bar"></div>
 
+    <details class="filter-details" id="filter-details">
+      <summary class="filter-summary">🔍 ตัวกรองราคาและการเรียง</summary>
     <form class="filter-bar" id="filter-form">
       <label for="min-price">ราคา</label>
-      <input type="number" id="min-price" placeholder="ต่ำสุด" min="0" />
+      <input type="number" id="min-price" placeholder="ต่ำสุด" min="0" aria-label="ราคาต่ำสุด (บาท)" inputmode="numeric" />
       <span style="color: var(--muted)">–</span>
-      <input type="number" id="max-price" placeholder="สูงสุด" min="0" />
+      <input type="number" id="max-price" placeholder="สูงสุด" min="0" aria-label="ราคาสูงสุด (บาท)" inputmode="numeric" />
 
       <label for="sort-select" style="margin-left: 8px">เรียงตาม</label>
       <select id="sort-select">
@@ -53,9 +57,10 @@
         <option value="price_desc">ราคาสูง → ต่ำ</option>
       </select>
 
-      <button type="submit" class="btn btn-primary btn-sm">กรอง</button>
+      <button type="submit" class="btn btn-primary btn-sm">ค้นหาตามนี้</button>
       <button type="button" class="btn-ghost" id="reset-filter">ล้างตัวกรอง</button>
     </form>
+    </details>
 
     <p class="page-title" id="page-title">สินค้าแนะนำสำหรับคุณ</p>
     <div class="product-grid" id="product-grid">
@@ -63,7 +68,8 @@
     </div>
   </main>
 
-  <script src="js/api.js"></script>
+  <script src="js/api.js?v=20261009e"></script>
+  <script src="js/chat.js?v=20261009e"></script>
   <script>
     const grid = document.getElementById("product-grid");
     const pageTitle = document.getElementById("page-title");
@@ -129,13 +135,14 @@
             <div class="product-thumb-wrap">
               <div class="product-thumb">${productThumb(p)}</div>
               ${outOfStock ? `<div class="badge-out-of-stock">สินค้าหมด</div>` : ""}
+              ${compareButtonHtml(p)}
             </div>
             <div class="product-info">
               ${p.free_shipping ? `<span class="badge-free-shipping">ส่งฟรี</span>` : ""}
+              ${specCompleteBadge(p)}
               <div class="product-name">${escapeHtml(p.name)}</div>
               <div class="product-price">
-                ${formatBaht(p.price)}
-                ${p.original_price ? `<span class="original">${formatBaht(p.original_price)}</span>` : ""}
+                ${priceHtml(p)}
               </div>
               <div class="product-meta">
                 <span>${p.review_count > 0 ? `⭐ ${p.rating}` : "ยังไม่มีรีวิว"}</span>
@@ -185,7 +192,14 @@
       window.location.href = "index.html";
     });
 
+    // จอใหญ่: เปิดตัวกรองไว้เลย; มือถือ: ย่อไว้ สินค้าจะได้ขึ้นจอแรก (เปิดไว้ถ้ามีการกรองอยู่)
+    {
+      const p = new URLSearchParams(window.location.search);
+      const filtering = ["min_price", "max_price", "sort"].some((k) => p.get(k));
+      document.getElementById("filter-details").open = window.innerWidth > 700 || filtering;
+    }
     loadProducts();
+    ShopChat.init({ launcher: true });
   </script>
 </body>
 </html>

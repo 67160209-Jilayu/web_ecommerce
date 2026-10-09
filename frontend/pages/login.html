@@ -10,43 +10,54 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
     <div style="flex: 1"></div>
     <span id="auth-status" data-base="../"></span>
-    <a href="cart.html" class="cart-link">
-      🛍️
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <div class="auth-wrap">
-      <div class="auth-tabs">
-        <button type="button" class="auth-tab active" id="tab-login" onclick="switchTab('login')">เข้าสู่ระบบ</button>
-        <button type="button" class="auth-tab" id="tab-register" onclick="switchTab('register')">สมัครสมาชิก</button>
+      <div class="auth-tabs" role="tablist" aria-label="เลือกเข้าสู่ระบบหรือสมัครสมาชิก">
+        <button type="button" class="auth-tab active" id="tab-login" role="tab" aria-selected="true"
+          aria-controls="login-form" onclick="switchTab('login')">เข้าสู่ระบบ</button>
+        <button type="button" class="auth-tab" id="tab-register" role="tab" aria-selected="false"
+          aria-controls="register-form" onclick="switchTab('register')">สมัครสมาชิกใหม่</button>
       </div>
 
-      <form id="login-form">
-        <p class="auth-error" id="login-error" style="display: none;"></p>
+      <form id="login-form" novalidate role="tabpanel" aria-labelledby="tab-login">
+        <p class="auth-error" id="login-error" role="alert" style="display: none;"></p>
         <div class="form-group">
           <label for="login-email">อีเมล</label>
           <input type="email" id="login-email" required autocomplete="email" />
         </div>
         <div class="form-group">
           <label for="login-password">รหัสผ่าน</label>
-          <input type="password" id="login-password" required autocomplete="current-password" />
+          <div class="password-row">
+            <input type="password" id="login-password" required autocomplete="current-password" />
+            <button type="button" class="btn-ghost password-toggle" aria-controls="login-password"
+              aria-pressed="false" onclick="togglePassword(this)">แสดงรหัส</button>
+          </div>
         </div>
-        <button type="submit" class="btn btn-primary" style="width: 100%;">เข้าสู่ระบบ</button>
+        <button type="submit" class="btn btn-primary btn-block" id="login-btn">เข้าสู่ระบบ</button>
+        <p class="form-hint" style="text-align: center; margin-top: 12px;">
+          ยังไม่มีบัญชี? <button type="button" class="link-btn" onclick="switchTab('register')">สมัครสมาชิกฟรี</button>
+        </p>
       </form>
 
-      <form id="register-form" style="display: none;">
-        <p class="auth-error" id="register-error" style="display: none;"></p>
+      <form id="register-form" novalidate role="tabpanel" aria-labelledby="tab-register" style="display: none;">
+        <p class="auth-error" id="register-error" role="alert" style="display: none;"></p>
         <div class="form-group">
-          <label for="register-name">ชื่อที่ใช้แสดง</label>
+          <label for="register-name">ชื่อของคุณ</label>
           <input type="text" id="register-name" required autocomplete="name" />
         </div>
         <div class="form-group">
@@ -54,10 +65,16 @@
           <input type="email" id="register-email" required autocomplete="email" />
         </div>
         <div class="form-group">
-          <label for="register-password">รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</label>
-          <input type="password" id="register-password" required minlength="6" autocomplete="new-password" />
+          <label for="register-password">ตั้งรหัสผ่าน</label>
+          <div class="password-row">
+            <input type="password" id="register-password" required minlength="6" autocomplete="new-password"
+              aria-describedby="register-password-hint" />
+            <button type="button" class="btn-ghost password-toggle" aria-controls="register-password"
+              aria-pressed="false" onclick="togglePassword(this)">แสดงรหัส</button>
+          </div>
+          <div class="form-hint" id="register-password-hint">อย่างน้อย 6 ตัวอักษร</div>
         </div>
-        <button type="submit" class="btn btn-primary" style="width: 100%;">สมัครสมาชิก</button>
+        <button type="submit" class="btn btn-primary btn-block" id="register-btn">สมัครสมาชิก</button>
         <p class="form-hint" style="text-align: center; margin-top: 12px;">
           สมัครแล้วเปิดร้านขายของได้ทันที ฟรี ไม่มีค่าธรรมเนียม
         </p>
@@ -65,7 +82,7 @@
     </div>
   </main>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261009e"></script>
   <script>
     /** หน้าที่ผู้ใช้ตั้งใจจะไปก่อนถูกเด้งมาล็อกอิน (ส่งมาทาง ?next=) */
     function getNextUrl() {
@@ -78,14 +95,47 @@
     function switchTab(tab) {
       document.getElementById("login-form").style.display = tab === "login" ? "block" : "none";
       document.getElementById("register-form").style.display = tab === "register" ? "block" : "none";
-      document.getElementById("tab-login").classList.toggle("active", tab === "login");
-      document.getElementById("tab-register").classList.toggle("active", tab === "register");
+      ["login", "register"].forEach((t) => {
+        const b = document.getElementById(`tab-${t}`);
+        b.classList.toggle("active", t === tab);
+        b.setAttribute("aria-selected", String(t === tab));
+      });
+      document.getElementById(tab === "login" ? "login-email" : "register-name").focus();
+    }
+
+    /** แสดง/ซ่อนรหัสผ่าน — ช่วยคนที่พิมพ์ผิดบ่อยบนมือถือ */
+    function togglePassword(btn) {
+      const input = document.getElementById(btn.getAttribute("aria-controls"));
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      btn.textContent = show ? "ซ่อนรหัส" : "แสดงรหัส";
+      btn.setAttribute("aria-pressed", String(show));
+    }
+
+    /** ปุ่มกำลังทำงาน: กดซ้ำไม่ได้ + บอกว่ากำลังทำอะไร */
+    function setLoading(btn, loading, text) {
+      if (loading) btn.dataset.label = btn.textContent;
+      btn.disabled = loading;
+      btn.classList.toggle("loading", loading);
+      btn.textContent = loading ? text : btn.dataset.label;
+    }
+
+    // ถ้ามาจากหน้าที่ต้องล็อกอิน บอกผู้ใช้ว่าทำไมถึงมาอยู่หน้านี้
+    if (new URLSearchParams(window.location.search).get("next")) {
+      const p = document.getElementById("login-error");
+      p.className = "alert alert-info";
+      p.removeAttribute("role");
+      p.textContent = "กรุณาเข้าสู่ระบบก่อน แล้วระบบจะพากลับไปหน้าเดิมให้";
+      p.style.display = "block";
     }
 
     document.getElementById("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const errorEl = document.getElementById("login-error");
       errorEl.style.display = "none";
+      if (!validateRequired(e.currentTarget)) return;
+      const btn = document.getElementById("login-btn");
+      setLoading(btn, true, "กำลังเข้าสู่ระบบ...");
       try {
         await login(
           document.getElementById("login-email").value.trim(),
@@ -93,8 +143,11 @@
         );
         window.location.href = getNextUrl();
       } catch (err) {
-        errorEl.textContent = err.message;
+        errorEl.className = "auth-error";
+        errorEl.setAttribute("role", "alert");
+        errorEl.textContent = `${err.message} — ตรวจอีเมลและรหัสผ่านอีกครั้ง`;
         errorEl.style.display = "block";
+        setLoading(btn, false);
       }
     });
 
@@ -102,6 +155,9 @@
       e.preventDefault();
       const errorEl = document.getElementById("register-error");
       errorEl.style.display = "none";
+      if (!validateRequired(e.currentTarget)) return;
+      const btn = document.getElementById("register-btn");
+      setLoading(btn, true, "กำลังสมัคร...");
       const email = document.getElementById("register-email").value.trim();
       const password = document.getElementById("register-password").value;
       try {
@@ -111,6 +167,7 @@
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.style.display = "block";
+        setLoading(btn, false);
       }
     });
   </script>

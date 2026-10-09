@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>เปรียบเทียบสินค้า - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
+</head>
+<body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <form class="search-bar" id="search-form">
+      <input type="search" id="search-input" aria-label="ค้นหาสินค้า" placeholder="ค้นหาสินค้า..." autocomplete="off" />
+      <button type="submit">ค้นหา</button>
+    </form>
+    <span id="auth-status" data-base="../"></span>
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container" id="main" tabindex="-1">
+    <a href="../index.html" class="back-link">← กลับไปเลือกสินค้า</a>
+    <p class="page-title">เปรียบเทียบสินค้า</p>
+    <div id="compare-body"><p class="state-message">กำลังโหลด...</p></div>
+  </main>
+
+  <script src="../js/api.js?v=20261009e"></script>
+  <script src="../js/chat.js?v=20261009e"></script>
+  <script>
+    document.getElementById("search-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = document.getElementById("search-input").value.trim();
+      window.location.href = q ? `../index.html?search=${encodeURIComponent(q)}` : "../index.html";
+    });
+
+    let ids = [];
+    let diffOnly = true; // ค่าเริ่มต้น: แสดงเฉพาะที่ต่าง (ผู้ใช้ชอบการซ่อนมากกว่าไฮไลต์)
+    let province = "";
+    let provinces = [];
+    let data = null;
+
+    function readIds() {
+      const raw = new URLSearchParams(window.location.search).get("ids") || "";
+      return [...new Set(raw.split(",").map((x) => parseInt(x, 10)).filter((x) => x > 0))].slice(0, COMPARE_MAX);
+    }
+
+    function writeIds() {
+      const url = new URL(window.location.href);
+      url.searchParams.set("ids", ids.join(","));
+      history.replaceState(null, "", url);
+    }
+
+    async function init() {
+      ids = readIds();
+      try {
+        diffOnly = localStorage.getItem("shopmarket_compare_diff") !== "0";
+      } catch {}
+      if (ids.length < 2) return renderNotEnough();
+      [province, provinces] = await Promise.all([
+        getBuyerProvince(),
+        fetchProvinces().catch(() => []),
+      ]);
+      await load();
+    }
+
+    function renderNotEnough() {
+      document.getElementById("compare-body").innerHTML = `
+        <div class="panel"><p class="state-message">
+          เลือกสินค้าอย่างน้อย 2 ชิ้นเพื่อเปรียบเทียบ — กดปุ่ม "+ เทียบ" บนการ์ดสินค้า
+          แล้วกด "เปรียบเทียบ" ที่ถาดด้านล่าง<br /><br />
+          <a href="../index.html" class="btn btn-primary btn-sm">ไปเลือกสินค้า</a></p></div>`;
+    }
+
+    async function load() {
+      const body = document.getElementById("compare-body");
+      try {
+        // ขอทุกแถวมาครั้งเดียว แล้วซ่อนแถวที่เหมือนกันฝั่งหน้าเว็บ — สลับปุ่มได้ทันทีไม่ต้องโหลดใหม่
+        const params = { diff_only: "false" };
+        if (province) params.province = province;
+        data = await fetchCompare(ids, params);
+      } catch (err) {
+        body.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      // สินค้าที่ปิดขาย/ไม่พบจะไม่อยู่ในผลลัพธ์ → ปรับ ids ให้ตรง
+      const returned = (data.items || []).map((it) => it.product_id ?? it.id);
+      if (returned.length && returned.length !== ids.length) {
+        ids = ids.filter((id) => returned.includes(id));
+        writeIds();
+        // เอาสินค้าที่ปิดขายออกจากถาดด้วย
+        (data.missing_ids || []).forEach((id) => isInCompare(id) && removeFromCompare(id));
+      }
+      if (!province && data.province) province = data.province;
+      render();
+    }
+
+    /* ---------- แถวพื้นฐาน (ทุกหมวด): ราคา ค่าส่ง ราคารวม รีวิว ร้าน ---------- */
+    function baseRows(items) {
+      const totals = items.map((it) => (typeof it.total === "number" ? it.total : null));
+      const minTotal = Math.min(...totals.filter((x) => x !== null));
+      const ratings = items.map((it) => (it.review_count > 0 ? Number(it.rating) : null));
+      const maxRating = Math.max(...ratings.filter((x) => x !== null));
+      const many = (arr) => arr.filter((x) => x !== null).length > 1;
+
+      const shipCell = (it) => {
+        const s = it.shipping;
+        if (!s) return { html: `<span class="cmp-missing">ร้านไม่ได้ระบุ</span>` };
+        const fee = shippingFeeText(s);
+        const days =
+          s.days_min && s.days_max
+            ? s.days_min === s.days_max ? `${s.days_min} วัน` : `${s.days_min}–${s.days_max} วัน`
+            : "";
+        return {
+          html: `${fee}${days ? `<div class="cmp-sub">ถึงใน ${days}</div>` : ""}${
+            province ? "" : `<div class="cmp-sub">ค่าส่งมาตรฐาน — เลือกจังหวัดเพื่อดูค่าจริง</div>`
+          }`,
+        };
+      };
+
+      return [
+        {
+          name_th: "ราคา",
+          cells: items.map((it) => ({ html: `<span class="product-price">${priceHtml(it)}</span>` })),
+        },
+        { name_th: `ค่าส่ง${province ? `ไป${escapeHtml(province)}` : ""}`, cells: items.map(shipCell) },
+        {
+          name_th: "ราคารวมค่าส่ง",
+          cells: items.map((it, i) => ({
+            html: totals[i] !== null ? `<b>${formatBaht(totals[i])}</b>` : `<span class="cmp-missing">—</span>`,
+            best: many(totals) && totals[i] === minTotal,
+          })),
+        },
+        {
+          name_th: "รีวิว",
+          cells: items.map((it, i) => ({
+            html: ratings[i] !== null ? `⭐ ${it.rating} <span class="cmp-sub-inline">(${it.review_count})</span>` : `<span class="cmp-missing">ยังไม่มีรีวิว</span>`,
+            best: many(ratings) && ratings[i] === maxRating,
+          })),
+        },
+        {
+          name_th: "ร้าน",
+          cells: items.map((it) => ({
+            html: `<a href="shop.html?id=${it.shop_id}" class="cmp-link">${escapeHtml(it.shop_name || "")}</a>${
+              it.shop_rating ? `<div class="cmp-sub">⭐ ${it.shop_rating}</div>` : ""
+            }`,
+          })),
+        },
+      ];
+    }
+
+    function cellsHtml(cells, n) {
+      const out = cells.map(
+        (c) => `<div class="cmp-cell ${c.best ? "best" : ""}">${c.html}${c.best ? `<span class="sr-only"> (ดีที่สุด)</span>` : ""}</div>`
+      );
+      // ช่องว่างสำหรับ "+ เพิ่มสินค้า" ให้ทุกแถวมีจำนวนคอลัมน์เท่าหัวตาราง
+      while (out.length < n) out.push(`<div class="cmp-cell cmp-cell-empty"></div>`);
+      return out.join("");
+    }
+
+    function rowHtml(label, cells, n, extraClass = "") {
+      return `
+        <div class="cmp-row ${extraClass}" role="row">
+          <div class="cmp-label" role="rowheader">${label}</div>
+          <div class="cmp-cells">${cellsHtml(cells, n)}</div>
+        </div>`;
+    }
+
+    function specRowCells(row) {
+      return (row.cells || row.values || []).map((c) => ({
+        html:
+          c.display === null || c.display === undefined || c.display === ""
+            ? `<span class="cmp-missing">ร้านไม่ได้ระบุ</span>`
+            : escapeHtml(String(c.display)),
+        best: !!c.is_best,
+      }));
+    }
+
+    /** หัวคอลัมน์ที่ติดจอ — กะทัดรัด (รูป ชื่อ ราคา) เพื่อไม่กินพื้นที่จอมือถือ */
+    function headCell(it) {
+      const id = it.product_id ?? it.id;
+      return `
+        <div class="cmp-cell cmp-head-cell">
+          <button type="button" class="cmp-remove" onclick="removeItem(${id})"
+            aria-label="เอา ${escapeHtml(it.name)} ออกจากการเทียบ"><span aria-hidden="true">✕</span><span class="cmp-remove-text">เอาออก</span></button>
+          <a href="product-detail.html?id=${id}" class="cmp-thumb" tabindex="-1" aria-hidden="true">${productThumb(it)}</a>
+          <div class="cmp-head-text">
+            <a href="product-detail.html?id=${id}" class="cmp-name">${escapeHtml(it.name)}</a>
+            <div class="product-price cmp-head-price">${priceHtml(it)}</div>
+          </div>
+        </div>`;
+    }
+
+    /** ป้ายสรุป: แสดง 2 อันแรก ที่เหลือรวมเป็น "+N" (กดเพื่อดูทั้งหมด) — ไม่ให้รกบนมือถือ */
+    function badgesHtml(badges) {
+      const labels = badges.map((b) => (typeof b === "string" ? b : b.label));
+      if (!labels.length) return "";
+      const shown = labels.slice(0, 2);
+      const rest = labels.slice(2);
+      return `<div class="cmp-badges">
+        ${shown.map((l) => `<span class="cmp-badge">${escapeHtml(l)}</span>`).join("")}
+        ${rest.map((l) => `<span class="cmp-badge" hidden>${escapeHtml(l)}</span>`).join("")}
+        ${rest.length
+          ? `<button type="button" class="cmp-badge cmp-badge-more" aria-label="ดูป้ายอีก ${rest.length} อัน"
+               onclick="this.parentElement.querySelectorAll('[hidden]').forEach((e) => (e.hidden = false)); this.remove()">+${rest.length}</button>`
+          : ""}
+      </div>`;
+    }
+
+    /** แถวแรกของตาราง (ไม่ติดจอ): ป้ายสรุป + ข้อมูลครบ + ปุ่มใส่ตะกร้า */
+    function actionCell(it) {
+      const id = it.product_id ?? it.id;
+      const out = it.stock === 0;
+      return {
+        html: `
+          ${badgesHtml(it.badges || [])}
+          <button type="button" class="btn btn-primary btn-sm cmp-cart-btn" ${out ? "disabled" : ""}
+            onclick="addItemToCart(${id}, this)">${out ? "สินค้าหมด" : "ใส่ตะกร้า"}</button>`,
+      };
+    }
+
+    function render() {
+      const body = document.getElementById("compare-body");
+      const items = data.items || [];
+      if (items.length < 2) return renderNotEnough();
+
+      const canAdd = items.length < COMPARE_MAX;
+      const n = items.length + (canAdd ? 1 : 0);
+      const sameCategory = data.same_category !== false;
+      const groups = sameCategory ? data.groups || [] : [];
+      const totalSpecRows = groups.reduce((s, g) => s + (g.rows || []).length, 0);
+      const hiddenSame = groups.reduce((s, g) => s + (g.rows || []).filter((r) => r.differs === false).length, 0);
+      const categoryId = items[0].category_id;
+
+      const specHtml = groups
+        .map((g) => {
+          const rows = (g.rows || []).filter((r) => !diffOnly || r.differs !== false);
+          if (!rows.length) return "";
+          return `
+            <div class="cmp-group" role="rowgroup">
+              <div class="cmp-group-title">${escapeHtml(g.name || g.group_name || "สเปก")}</div>
+              ${rows
+                .map((r) =>
+                  rowHtml(
+                    `${escapeHtml(r.name_th || r.key)}${r.unit ? ` <span class="cmp-unit">(${escapeHtml(r.unit)})</span>` : ""}`,
+                    specRowCells(r),
+                    n
+                  )
+                )
+                .join("")}
+            </div>`;
+        })
+        .join("");
+
+      body.innerHTML = `
+        ${data.summary ? `<p class="cmp-summary" role="status">💡 ${escapeHtml(data.summary)}</p>` : ""}
+        ${(data.missing_ids || []).length
+          ? `<p class="alert alert-info">มีสินค้า ${data.missing_ids.length} ชิ้นที่ปิดขายหรือไม่พบแล้ว จึงไม่แสดงในตาราง</p>`
+          : ""}
+        <div class="cmp-toolbar">
+          <label class="switch-row">
+            <input type="checkbox" id="diff-toggle" ${diffOnly ? "checked" : ""} />
+            <span>แสดงเฉพาะที่ต่าง${diffOnly && hiddenSame ? ` <span class="cmp-sub-inline">(ซ่อนที่เหมือนกัน ${hiddenSame} แถว)</span>` : ""}</span>
+          </label>
+          <label class="cmp-province">ส่งไปที่
+            <select id="province-select" aria-label="จังหวัดที่จัดส่ง">
+              <option value="">— เลือกจังหวัด —</option>
+              ${provinceOptionsHtml(provinces, province)}
+            </select>
+          </label>
+          <button type="button" class="btn-ghost" id="share-btn">🔗 แชร์ลิงก์</button>
+          <button type="button" class="btn-ghost chat-entry-btn" data-chat-entry ${ShopChat.isReady() ? "" : "hidden"}
+            onclick="askChatAboutCompare()">💬 ถามผู้ช่วยว่าเลือกอันไหนดี</button>
+        </div>
+        ${sameCategory
+          ? ""
+          : `<p class="alert alert-info">สินค้าต่างหมวดกัน จึงเทียบได้เฉพาะราคา ค่าส่ง และรีวิว</p>`}
+
+        <div class="cmp-wrap" style="--n:${n}">
+          <div class="cmp-sticky" id="cmp-sticky" aria-hidden="false">
+            <div class="cmp-row cmp-head" role="row">
+              <div class="cmp-label"></div>
+              <div class="cmp-cells">
+                ${items.map(headCell).join("")}
+                ${canAdd
+                  ? `<div class="cmp-cell cmp-head-cell cmp-add">
+                       <a href="../index.html${categoryId ? `?category_id=${categoryId}` : ""}" class="cmp-add-link">
+                         <span>+</span>เพิ่มสินค้า</a>
+                     </div>`
+                  : ""}
+              </div>
+            </div>
+          </div>
+          <div class="cmp-scroll" id="cmp-scroll" role="table" aria-label="ตารางเปรียบเทียบสินค้า">
+            ${rowHtml("", items.map(actionCell), n, "cmp-actions")}
+            <div class="cmp-group" role="rowgroup">
+              <div class="cmp-group-title">ราคาและการจัดส่ง</div>
+              ${baseRows(items).map((r) => rowHtml(r.name_th, r.cells, n)).join("")}
+            </div>
+            ${specHtml}
+            ${sameCategory && totalSpecRows && !specHtml
+              ? `<p class="state-message">สเปกของสินค้าเหล่านี้เหมือนกันทุกข้อ — ปิด "แสดงเฉพาะที่ต่าง" เพื่อดูทั้งหมด</p>`
+              : ""}
+            ${sameCategory && !totalSpecRows
+              ? `<p class="state-message">ร้านยังไม่ได้กรอกสเปกของสินค้าเหล่านี้</p>`
+              : ""}
+          </div>
+        </div>`;
+
+      document.getElementById("diff-toggle").addEventListener("change", (e) => {
+        diffOnly = e.target.checked;
+        try {
+          localStorage.setItem("shopmarket_compare_diff", diffOnly ? "1" : "0");
+        } catch {}
+        render();
+      });
+      document.getElementById("province-select").addEventListener("change", (e) => {
+        province = e.target.value;
+        setBuyerProvince(province);
+        load();
+      });
+      document.getElementById("share-btn").addEventListener("click", shareLink);
+      syncScroll();
+    }
+
+    /** หัวตาราง (ติดจอแนวตั้ง) ต้องเลื่อนแนวนอนไปพร้อมตาราง — โดยเฉพาะบนมือถือที่ปัดดูชิ้นที่ 3–4 */
+    function syncScroll() {
+      const head = document.getElementById("cmp-sticky");
+      const scroll = document.getElementById("cmp-scroll");
+      // เทียบค่าแทนการล็อก: ถ้าตรงกันแล้วก็ไม่ตั้งซ้ำ จึงไม่วนสะท้อนไปมา
+      const link = (from, to) =>
+        from.addEventListener("scroll", () => {
+          if (Math.abs(to.scrollLeft - from.scrollLeft) > 1) to.scrollLeft = from.scrollLeft;
+        }, { passive: true });
+      link(scroll, head);
+      link(head, scroll);
+    }
+
+    /** เปิดแชทพร้อมร่างคำถามเทียบสินค้าในตาราง (ผู้ใช้แก้ก่อนส่งได้) */
+    function askChatAboutCompare() {
+      const names = (data?.items || []).map((it) => it.name).slice(0, 4);
+      ShopChat.open(`ช่วยเทียบ ${names.join(" กับ ")} ให้หน่อย เหมาะกับใครบ้าง`.slice(0, 480));
+    }
+
+    async function shareLink() {
+      const url = `${window.location.origin}${window.location.pathname}?ids=${ids.join(",")}`;
+      const title = "ช่วยดูหน่อย เลือกอันไหนดี";
+      if (navigator.share) {
+        try {
+          await navigator.share({ title, url });
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast("คัดลอกลิงก์แล้ว ส่งให้เพื่อนใน LINE ได้เลย");
+      } catch {
+        window.prompt("คัดลอกลิงก์นี้", url);
+      }
+    }
+
+    function removeItem(id) {
+      ids = ids.filter((x) => x !== id);
+      writeIds();
+      if (isInCompare(id)) removeFromCompare(id);
+      if (ids.length < 2) return renderNotEnough();
+      data.items = data.items.filter((it) => (it.product_id ?? it.id) !== id);
+      load();
+    }
+
+    async function addItemToCart(id, btn) {
+      btn.disabled = true;
+      try {
+        await addToCart(id, 1);
+        await renderCartBadge();
+        showAddedToCart();
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // หัวตารางต้องติดใต้ topbar (ซึ่ง sticky อยู่แล้ว) — วัดความสูงจริงเพราะบนมือถือ topbar ขึ้นสองบรรทัด
+    function measureTopbar() {
+      const bar = document.querySelector(".topbar");
+      // มือถือ topbar ไม่ติดจอ → หัวตารางติดที่ขอบบนสุด
+      const h = bar && getComputedStyle(bar).position === "sticky" ? bar.offsetHeight : 0;
+      document.documentElement.style.setProperty("--topbar-h", `${h}px`);
+    }
+    window.addEventListener("resize", measureTopbar);
+    measureTopbar();
+
+    ShopChat.init({ launcher: false });
+    init();
+  </script>
+</body>
+</html>

@@ -10,35 +10,93 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
     <form class="search-bar" id="search-form">
-      <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
+      <input type="search" id="search-input" aria-label="ค้นหาสินค้า" placeholder="ค้นหาสินค้า..." autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
     <span id="auth-status" data-base="../"></span>
-    <a href="cart.html" class="cart-link">
-      🛍️
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <p class="page-title">ตะกร้าสินค้าของฉัน</p>
-    <div id="cart-list"><p class="state-message">กำลังโหลดตะกร้า...</p></div>
+    <div id="price-notices" class="price-notice-list" role="status" aria-live="polite"></div>
+    <div id="cart-list"><p class="state-message loading">กำลังโหลดตะกร้า...</p></div>
     <div id="cart-summary-wrap"></div>
   </main>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261009e"></script>
   <script>
     document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const q = document.getElementById("search-input").value.trim();
       window.location.href = q ? `../index.html?search=${encodeURIComponent(q)}` : "../index.html";
     });
+
+    // notice ที่แสดงในการเปิดหน้านี้ครั้งนี้ — เก็บไว้ในหน่วยความจำ เพราะพอทำเครื่องหมายอ่านแล้ว
+    // backend จะไม่ส่งมาอีก แต่ผู้ใช้ควรยังเห็นอยู่จนกว่าจะออกจากหน้า (หรือเอาสินค้าออก)
+    let shownNotices = [];
+
+    const bahtNumber = (n) => Number(n || 0).toLocaleString("th-TH");
+
+    /** ดึง notice ราคาลด: ใช้ที่แนบมากับตะกร้าก่อน ถ้าไม่มีค่อยเรียก /account/notices (ล็อกอินเท่านั้น) */
+    async function loadNotices(cart) {
+      if (!isLoggedIn()) return [];
+      if (Array.isArray(cart.notices)) return cart.notices;
+      try {
+        const res = await fetchNotices();
+        return Array.isArray(res) ? res : res?.notices || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function renderNotices(cart) {
+      const el = document.getElementById("price-notices");
+      // สินค้าที่เอาออกจากตะกร้าแล้ว notice ต้องหายไปด้วย
+      // และถ้าราคากลับขึ้นจนไม่ต่ำกว่าตอนใส่ตะกร้าแล้ว ก็ไม่แสดงต่อ
+      const priceOf = new Map(cart.items.map((i) => [i.product_id, i.price]));
+      shownNotices = shownNotices.filter((n) => {
+        const price = priceOf.get(n.sku_id ?? n.product_id);
+        return price !== undefined && price < n.old_price;
+      });
+      // หลายชิ้นลดพร้อมกัน → รวมเป็นแถบเดียว ไม่ให้แถบซ้อนกันจนรก (รายละเอียดอยู่ที่แถวสินค้า)
+      if (shownNotices.length > 2) {
+        el.innerHTML = `
+          <div class="price-notice">
+            <span class="price-notice-icon" aria-hidden="true">🔔</span>
+            <div>สินค้า <strong>${shownNotices.length} ชิ้น</strong> ในตะกร้าราคาลดลงตั้งแต่คุณใส่ตะกร้า
+              <div class="price-notice-name">ดูราคาเดิมที่ขีดฆ่าไว้ในแต่ละรายการด้านล่าง</div></div>
+          </div>`;
+        return;
+      }
+      el.innerHTML = shownNotices
+        .map((n) => {
+          const item = cart.items.find((i) => i.product_id === (n.sku_id ?? n.product_id));
+          const name = n.product_name || item?.name || "";
+          const now = item ? item.price : n.new_price;
+          return `
+          <div class="price-notice">
+            <span class="price-notice-icon" aria-hidden="true">🔔</span>
+            <div>
+              <div>ราคาลดลงตั้งแต่คุณใส่ตะกร้า: จาก ${bahtNumber(n.old_price)} เหลือ
+                <strong>${bahtNumber(now)}</strong> บาท (ถูกลง ${bahtNumber(n.old_price - now)} บาท)</div>
+              ${name ? `<div class="price-notice-name">${escapeHtml(name)}</div>` : ""}
+            </div>
+          </div>`;
+        })
+        .join("");
+    }
 
     async function renderCart() {
       const listEl = document.getElementById("cart-list");
@@ -52,9 +110,29 @@
         return;
       }
 
+      // notice ใหม่ที่ยังไม่เคยแสดงในหน้านี้ → เพิ่มเข้า shownNotices แล้วทำเครื่องหมายอ่านแล้ว
+      const notices = await loadNotices(cart);
+      notices.forEach((n) => {
+        const i = shownNotices.findIndex((x) => x.id === n.id);
+        if (i >= 0) shownNotices[i] = n; // ราคาลดอีก → อัปเดตตัวเลขใน notice เดิม
+        else shownNotices.push(n);
+      });
+      renderNotices(cart);
+      const unreadIds = notices.filter((n) => !n.read_at).map((n) => n.id);
+      if (unreadIds.length) {
+        try {
+          await markNoticesRead(unreadIds);
+        } catch {}
+        renderCartDot(null); // เห็นแล้ว → ลบจุดแจ้งที่ไอคอนตะกร้า
+      }
+
       if (cart.items.length === 0) {
-        listEl.innerHTML = `<p class="state-message">ตะกร้าของคุณยังว่างอยู่ —
-          <a href="../index.html" style="color: var(--chili);">ไปเลือกซื้อสินค้ากันเถอะ</a></p>`;
+        listEl.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon" aria-hidden="true">🛍️</div>
+            <p>ตะกร้าของคุณยังว่างอยู่</p>
+            <a href="../index.html" class="btn btn-primary">ไปเลือกซื้อสินค้า</a>
+          </div>`;
         summaryEl.innerHTML = "";
         return;
       }
@@ -79,16 +157,30 @@
               <div class="cart-item-thumb">${productThumb(item)}</div>
               <div class="cart-item-info">
                 <div class="cart-item-name">${escapeHtml(item.name)}</div>
-                <div class="cart-item-price">${formatBaht(item.price)}</div>
+                <div class="cart-item-price">${formatBaht(item.price)}${
+                  wasPrice(item)
+                    ? `<div class="cart-item-was-note">ราคาตอนใส่ตะกร้า
+                         <span class="cart-item-was" style="margin-left:2px">${formatBaht(wasPrice(item))}</span></div>`
+                    : ""
+                }</div>
               </div>
-              <div class="cart-item-qty">
-                <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity - 1})">−</button>
-                <span>${item.quantity}</span>
-                <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity + 1})"
-                  ${item.quantity >= item.stock ? "disabled" : ""}>+</button>
+              <div class="cart-item-controls">
+                <div class="cart-item-qty" role="group" aria-label="จำนวน ${escapeHtml(item.name)}">
+                  <button type="button" aria-label="ลดจำนวน" ${item.quantity <= 1 ? "disabled" : ""}
+                    onclick="changeQty(${item.product_id}, ${item.quantity - 1})">−</button>
+                  <span aria-live="polite">${item.quantity}</span>
+                  <button type="button" aria-label="เพิ่มจำนวน"
+                    onclick="changeQty(${item.product_id}, ${item.quantity + 1})"
+                    ${item.quantity >= item.stock ? "disabled" : ""}>+</button>
+                </div>
+                <div class="cart-item-line">
+                  <span class="cart-item-line-label">รวม</span>
+                  <span class="cart-item-price">${formatBaht(item.price * item.quantity)}</span>
+                </div>
+                <button type="button" class="btn-ghost cart-item-remove-btn"
+                  onclick="removeItem(${item.product_id}, ${item.quantity})"
+                  aria-label="เอา ${escapeHtml(item.name)} ออกจากตะกร้า">🗑️ ลบออก</button>
               </div>
-              <div class="cart-item-price">${formatBaht(item.price * item.quantity)}</div>
-              <button class="cart-item-remove" onclick="removeItem(${item.product_id})">ลบ</button>
             </div>`
             )
             .join("")}
@@ -97,21 +189,39 @@
         .join("");
 
       const itemCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
+      // ส่วนต่างรวมจากราคาตอนใส่ตะกร้า (เฉพาะรายการที่ราคาลดลง และผู้ใช้ล็อกอิน)
+      const savedSinceAdd = cart.items.reduce(
+        (sum, i) => sum + (wasPrice(i) ? (wasPrice(i) - i.price) * i.quantity : 0), 0);
       const shopCount = Object.keys(byShop).length;
       summaryEl.innerHTML = `
         <div class="cart-summary">
           <div>
             รวมทั้งหมด (${itemCount} ชิ้น จาก ${shopCount} ร้าน)
-            ${shopCount > 1 ? `<div style="font-size:0.78rem; opacity:0.7; margin-top:4px;">
+            ${shopCount > 1 ? `<div style="font-size: var(--fs-sm); margin-top:4px;">
               สินค้าจากต่างร้านจะถูกแยกเป็นคนละคำสั่งซื้อ</div>` : ""}
           </div>
           <div class="cart-total">${formatBaht(cart.total)}</div>
         </div>
-        <div style="text-align: right; margin-top: 14px;">
-          <button class="btn btn-primary" onclick="goCheckout()">ดำเนินการสั่งซื้อ</button>
-        </div>
-        <p style="text-align:right; color: var(--muted); font-size: 0.78rem; margin-top: 8px;">
-          ยังไม่รวมค่าจัดส่ง (คำนวณในหน้าถัดไป)</p>`;
+        ${savedSinceAdd > 0
+          ? `<p style="text-align:right; color: var(--azure-dark); font-size: var(--fs-sm); margin-top: 8px;">
+               ถูกกว่าตอนใส่ตะกร้ารวม ${formatBaht(savedSinceAdd)}</p>`
+          : ""}
+        <p style="text-align:right; color: var(--muted); font-size: var(--fs-sm); margin-top: 8px;">
+          ยังไม่รวมค่าจัดส่ง (คำนวณในหน้าถัดไป)</p>
+        <div class="cart-checkout-row">
+          <button class="btn btn-primary btn-lg" onclick="goCheckout()">ดำเนินการสั่งซื้อ →</button>
+        </div>`;
+    }
+
+    /**
+     * ราคาตอนใส่ตะกร้า (ขีดฆ่า) — แสดงในแถวสินค้าตราบใดที่ราคาตอนนี้ยังต่ำกว่า
+     * แม้ notice จะอ่านไปแล้ว ผู้ซื้อจะได้ยังเห็นว่าลดจริง (เฉพาะผู้ใช้ที่ล็อกอิน เหมือน notice)
+     */
+    function wasPrice(item) {
+      if (!isLoggedIn()) return null;
+      const n = shownNotices.find((x) => (x.sku_id ?? x.product_id) === item.product_id);
+      const was = item.price_at_add ?? n?.old_price;
+      return was && was > item.price ? was : null;
     }
 
     async function changeQty(productId, newQty) {
@@ -125,14 +235,34 @@
       }
     }
 
-    async function removeItem(productId) {
-      await changeQty(productId, 0);
+    /** เอาออกจากตะกร้า + กด "เอากลับคืน" ได้ (ใส่กลับด้วยจำนวนเดิม) */
+    async function removeItem(productId, qty) {
+      try {
+        await removeCartItem(productId);
+        await renderCartBadge();
+        await renderCart();
+        showToast("เอาสินค้าออกจากตะกร้าแล้ว", "success", {
+          label: "เอากลับคืน",
+          onClick: async () => {
+            try {
+              await addToCart(productId, qty || 1);
+              await renderCartBadge();
+              await renderCart();
+              showToast("ใส่กลับเข้าตะกร้าแล้ว");
+            } catch (err) {
+              showToast(err.message, "error");
+            }
+          },
+        });
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     }
 
     function goCheckout() {
       if (!isLoggedIn()) {
-        showToast("กรุณาเข้าสู่ระบบก่อนสั่งซื้อ", "error");
-        setTimeout(() => requireLogin("../"), 900);
+        showToast("กรุณาเข้าสู่ระบบก่อนสั่งซื้อ กำลังพาไปหน้าเข้าสู่ระบบ...");
+        setTimeout(() => requireLogin("../"), 1500);
         return;
       }
       window.location.href = "checkout.html";

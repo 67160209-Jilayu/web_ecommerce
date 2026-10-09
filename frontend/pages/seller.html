@@ -10,24 +10,26 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
     <div style="flex: 1"></div>
     <span id="auth-status" data-base="../"></span>
-    <a href="cart.html" class="cart-link">
-      🛍️
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <div id="seller-body"><p class="state-message">กำลังโหลด...</p></div>
   </main>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261009e"></script>
   <script>
     let myShop = null;
     let activeTab = "products";
@@ -64,7 +66,7 @@
             หลังเปิดร้านแล้วคุณจะลงขายสินค้าและรับคำสั่งซื้อได้ทันที
           </p>
           <p class="alert alert-error" id="shop-error" style="display:none;"></p>
-          <form id="open-shop-form">
+          <form id="open-shop-form" novalidate>
             <div class="form-group">
               <label for="shop-name">ชื่อร้าน *</label>
               <input type="text" id="shop-name" required maxlength="60" placeholder="เช่น บ้านสวนของฝาก" />
@@ -79,6 +81,7 @@
 
       document.getElementById("open-shop-form").addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!validateRequired(e.currentTarget)) return;
         const errorEl = document.getElementById("shop-error");
         errorEl.style.display = "none";
         try {
@@ -104,8 +107,7 @@
             <span>สินค้า ${myShop.product_count} รายการ</span>
             <span>${myShop.review_count > 0 ? `⭐ ${myShop.rating} (${myShop.review_count} รีวิว)` : "ยังไม่มีรีวิว"}</span>
             <span>${myShop.is_verified ? "✅ ร้านยืนยันแล้ว" : "ร้านทั่วไป"}</span>
-            <a href="shop.html?id=${myShop.id}" style="color: var(--marigold-light); text-decoration: underline;">
-              ดูหน้าร้านแบบลูกค้าเห็น →</a>
+            <a href="shop.html?id=${myShop.id}" class="banner-link">ดูหน้าร้านแบบที่ลูกค้าเห็น →</a>
           </div>
         </div>
 
@@ -114,6 +116,8 @@
             onclick="switchTab('products')">สินค้าของฉัน</button>
           <button type="button" class="tab-btn ${activeTab === "orders" ? "active" : ""}"
             onclick="switchTab('orders')">คำสั่งซื้อเข้าร้าน</button>
+          <button type="button" class="tab-btn ${activeTab === "prices" ? "active" : ""}"
+            onclick="switchTab('prices')">ราคา</button>
           <button type="button" class="tab-btn ${activeTab === "settings" ? "active" : ""}"
             onclick="switchTab('settings')">ตั้งค่าร้าน</button>
         </div>
@@ -131,6 +135,7 @@
     async function renderTabContent() {
       if (activeTab === "products") return renderProductsTab();
       if (activeTab === "orders") return renderOrdersTab();
+      if (activeTab === "prices") return renderPricesTab();
       return renderSettingsTab();
     }
 
@@ -156,7 +161,7 @@
               <div class="order-line-meta">${escapeHtml(p.category)}</div>
             </td>
             <td>${formatBaht(p.price)}</td>
-            <td>${p.stock === 0 ? '<span style="color: var(--chili-dark)">หมด</span>' : p.stock}</td>
+            <td>${p.stock === 0 ? '<span style="color: var(--azure-dark)">หมด</span>' : p.stock}</td>
             <td>${p.sold}</td>
             <td>${p.is_active ? '<span class="pill-muted">ขายอยู่</span>' : '<span class="status-badge status-CANCELLED">ปิดขาย</span>'}</td>
             <td style="white-space: nowrap;">
@@ -305,13 +310,118 @@
       }
     }
 
+    /* ---------- แท็บราคา: ราคาก่อนลดที่ระบบใช้ + คำเตือนขึ้นราคาก่อนลด + ตะกร้าที่ค้างสินค้า ---------- */
+    async function renderPricesTab() {
+      const box = document.getElementById("tab-content");
+      let status;
+      try {
+        status = await fetchPriceStatus();
+      } catch (err) {
+        box.innerHTML = `<p class="state-message">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      const items = Array.isArray(status) ? status : status?.items || [];
+      const grace = status?.grace || {};
+      const rules = {
+        ref_window_days: 30, raise_window_days: 14, raise_percent: 15,
+        notice_min_percent: 3, notice_min_baht: 20,
+        ...(status?.rules || {}),
+      };
+      const warned = items.filter((it) => (it.warnings || []).length);
+
+      const graceBanner = grace.active
+        ? `<p class="alert alert-info">
+             ⏳ <b>ช่วงผ่อนผันกฎราคาก่อนลด</b>${grace.ends_at ? ` ถึง ${new Date(grace.ends_at).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}` : ""} —
+             ตอนนี้ระบบแค่เตือนในหน้านี้ ยังไม่ซ่อน % ส่วนลดบนหน้าเว็บ หลังหมดช่วงผ่อนผัน
+             สินค้าที่มีคำเตือนจะไม่แสดง % ส่วนลดให้ลูกค้าเห็น</p>`
+        : "";
+
+      const rows = items.length
+        ? items
+            .map((it) => {
+              const ref = it.ref_price; // = ราคาขีดฆ่าที่ลูกค้าเห็นจริง
+              const warnings = it.warnings || [];
+              let state;
+              if (it.discount_hidden)
+                state = `<span class="pill-warn">ซ่อน % ส่วนลดอยู่${it.discount_percent ? ` (-${it.discount_percent}%)` : ""}</span>`;
+              else if (warnings.length)
+                state = `<span class="pill-warn">${grace.active && it.discount_percent ? `ยังแสดง -${it.discount_percent}% (ช่วงผ่อนผัน)` : "มีคำเตือน"}</span>`;
+              else if (it.discount_percent) state = `<span class="pill-ok">แสดงส่วนลด -${it.discount_percent}%</span>`;
+              else state = `<span class="pill-muted">ไม่มีส่วนลด</span>`;
+              return `
+          <tr>
+            <td>
+              <div>${escapeHtml(it.name || it.product_name || "")}
+                ${it.is_active === false ? '<span class="status-badge status-CANCELLED">ปิดขาย</span>' : ""}
+                ${it.in_stock === false ? '<span class="pill-muted">หมด</span>' : ""}</div>
+              ${warnings.length
+                ? `<ul class="warn-list">${warnings
+                    .map((w) => `<li>${escapeHtml(typeof w === "string" ? w : w.message)}</li>`)
+                    .join("")}</ul>`
+                : ""}
+            </td>
+            <td style="white-space: nowrap;">${formatBaht(it.price)}</td>
+            <td style="white-space: nowrap;">${ref
+              ? formatBaht(ref)
+              : `<span style="color: var(--muted)">—</span>${it.min_30d
+                  ? `<div class="order-line-meta">ต่ำสุด ${rules.ref_window_days} วัน ${formatBaht(it.min_30d)}</div>
+                     ${it.min_30d <= it.price
+                       ? `<div class="order-line-meta" style="white-space: normal; max-width: 220px;">
+                            ยังไม่แสดงราคาขีดฆ่า เพราะ ${rules.ref_window_days} วันที่ผ่านมาเคยขาย ${formatBaht(it.min_30d)}
+                            — ตั้งต่ำกว่า ${formatBaht(it.min_30d)} เพื่อโชว์ส่วนลด</div>`
+                       : ""}`
+                  : `<div class="order-line-meta">ยังไม่มีประวัติราคา</div>`}`}</td>
+            <td>${state}</td>
+            <td style="text-align: center;">
+              ${Number(it.carts_holding || 0).toLocaleString("th-TH")}
+              ${it.carts_notice_eligible
+                ? `<div class="order-line-meta" title="ตะกร้าของผู้ใช้ที่ล็อกอิน — จะเห็นแจ้งเตือนถ้าคุณลดราคา">
+                     ${Number(it.carts_notice_eligible).toLocaleString("th-TH")} คนจะเห็นแจ้งเตือนถ้าลดราคา</div>`
+                : ""}
+            </td>
+            <td style="white-space: nowrap;"><a class="btn-ghost" style="padding: 5px 12px; display: inline-block;"
+              href="product-form.html?id=${it.product_id}">แก้ราคา</a></td>
+          </tr>`;
+            })
+            .join("")
+        : `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--muted);">
+             ยังไม่มีสินค้าในร้าน</td></tr>`;
+
+      box.innerHTML = `
+        <div class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">สถานะราคา</h2>
+            ${warned.length ? `<span class="pill-warn">มีคำเตือน ${warned.length} รายการ</span>` : ""}
+          </div>
+          ${graceBanner}
+          <ul class="form-hint" style="margin: 0 0 14px; padding-left: 18px; line-height: 1.7;">
+            <li><b>ราคาก่อนลด</b> — ราคาขายต่ำสุดใน ${rules.ref_window_days} วันก่อนเริ่มลด ระบบใช้เป็นราคาขีดฆ่าให้อัตโนมัติ</li>
+            <li><b>ขึ้นราคาก่อนลด</b> — ถ้าขึ้นราคา ${rules.raise_percent}% ขึ้นไปภายใน ${rules.raise_window_days} วันก่อนลด
+              ระบบจะไม่แสดง % ส่วนลด (ราคาขีดฆ่ายังแสดงตามปกติ)</li>
+            <li><b>ในตะกร้า</b> — จำนวนตะกร้าที่มีสินค้านี้ค้างอยู่ (ไม่เปิดเผยตัวผู้ซื้อ) ถ้าลดราคาลงอย่างน้อย
+              ${rules.notice_min_percent}% หรือ ${rules.notice_min_baht} บาท ผู้ซื้อที่ล็อกอินจะเห็นแจ้งเตือนในตะกร้า</li>
+          </ul>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="min-width: 220px;">สินค้า</th><th style="white-space: nowrap;">ราคาขาย</th>
+                  <th style="white-space: nowrap;">ราคาก่อนลด (ระบบ)</th><th>% ส่วนลด</th><th style="text-align: center;">ในตะกร้า</th><th></th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
     /* ---------- แท็บตั้งค่า ---------- */
     function renderSettingsTab() {
       document.getElementById("tab-content").innerHTML = `
         <div class="panel" style="max-width: 520px;">
           <h2 class="panel-title" style="margin-bottom: 16px;">ตั้งค่าร้าน</h2>
           <p class="alert alert-error" id="settings-error" style="display:none;"></p>
-          <form id="settings-form">
+          <form id="settings-form" novalidate>
             <div class="form-group">
               <label for="edit-shop-name">ชื่อร้าน</label>
               <input type="text" id="edit-shop-name" value="${escapeHtml(myShop.name)}" maxlength="60" required />
@@ -322,10 +432,15 @@
             </div>
             <button type="submit" class="btn btn-primary">บันทึกการเปลี่ยนแปลง</button>
           </form>
+        </div>
+        <div class="panel" style="max-width: 720px;" id="shipping-panel">
+          <p class="state-message">กำลังโหลดค่าจัดส่ง...</p>
         </div>`;
+      renderShippingPanel();
 
       document.getElementById("settings-form").addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!validateRequired(e.currentTarget)) return;
         const errorEl = document.getElementById("settings-error");
         errorEl.style.display = "none";
         try {
@@ -335,6 +450,111 @@
           });
           showToast("บันทึกแล้ว");
           renderDashboard();
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.style.display = "block";
+        }
+      });
+    }
+
+    /* ---------- ค่าจัดส่ง: ราคาเดียวทั้งประเทศ + กำหนดรายภาคได้ ---------- */
+    async function renderShippingPanel() {
+      const panel = document.getElementById("shipping-panel");
+      let ship = null;
+      let provinces = [];
+      try {
+        [ship, provinces] = await Promise.all([fetchMyShipping(), fetchProvinces().catch(() => [])]);
+      } catch (err) {
+        panel.innerHTML = `<p class="state-message">โหลดค่าจัดส่งไม่สำเร็จ: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      ship = ship || {};
+      const regions = [...new Set((provinces || []).map((p) => p.region).filter(Boolean))];
+      const byRegion = {};
+      (ship.region_rates || []).forEach((r) => (byRegion[r.region] = r));
+      const num = (v) => (v === null || v === undefined ? "" : v);
+
+      panel.innerHTML = `
+        <h2 class="panel-title" style="margin-bottom: 6px;">ค่าจัดส่ง</h2>
+        <p class="form-hint" style="margin: 0 0 14px;">
+          ลูกค้าจะเห็นค่าส่งและราคารวมไปจังหวัดของตัวเองในหน้าเปรียบเทียบ
+          สินค้าที่ติ๊ก "จัดส่งฟรี" ไว้จะไม่คิดค่าส่ง</p>
+        <p class="alert alert-error" id="ship-error" style="display:none;"></p>
+        <form id="shipping-form" novalidate>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="ship-flat">ค่าส่งทั่วประเทศ *</label>
+              <div class="unit-input"><input type="number" id="ship-flat" min="0" required value="${num(ship.flat_rate)}" />
+                <span class="unit-suffix">บาท</span></div>
+            </div>
+            <div class="form-group">
+              <label for="ship-free">ส่งฟรีเมื่อซื้อครบ (ต่อร้าน)</label>
+              <div class="unit-input"><input type="number" id="ship-free" min="0" value="${num(ship.free_over)}"
+                placeholder="เว้นว่าง = ไม่มีส่งฟรี" />
+                <span class="unit-suffix">บาท</span></div>
+            </div>
+            <div class="form-group">
+              <label for="ship-dmin">ส่งถึงภายใน (เร็วสุด)</label>
+              <div class="unit-input"><input type="number" id="ship-dmin" min="0" value="${num(ship.days_min)}" />
+                <span class="unit-suffix">วัน</span></div>
+            </div>
+            <div class="form-group">
+              <label for="ship-dmax">ส่งถึงภายใน (ช้าสุด)</label>
+              <div class="unit-input"><input type="number" id="ship-dmax" min="0" value="${num(ship.days_max)}" />
+                <span class="unit-suffix">วัน</span></div>
+            </div>
+          </div>
+          ${regions.length
+            ? `<details class="ship-regions" ${(ship.region_rates || []).length ? "open" : ""}>
+                 <summary>กำหนดค่าส่งแยกตามภาค (เว้นว่าง = ใช้ค่าทั่วประเทศ)</summary>
+                 <div class="table-scroll">
+                   <table class="data-table">
+                     <thead><tr><th>ภาค</th><th>ค่าส่ง (บาท)</th><th>เร็วสุด (วัน)</th><th>ช้าสุด (วัน)</th></tr></thead>
+                     <tbody>
+                       ${regions
+                         .map((r, i) => {
+                           const v = byRegion[r] || {};
+                           return `<tr data-region="${escapeHtml(r)}">
+                             <td>${escapeHtml(r)}
+                               <div class="region-provinces">${(provinces || [])
+                                 .filter((p) => p.region === r)
+                                 .map((p) => escapeHtml(p.name))
+                                 .join(" · ")}</div></td>
+                             <td><input type="number" min="0" class="table-input" data-f="rate" value="${num(v.rate)}" aria-label="ค่าส่ง ${escapeHtml(r)}" /></td>
+                             <td><input type="number" min="0" class="table-input" data-f="days_min" value="${num(v.days_min)}" aria-label="เร็วสุด ${escapeHtml(r)}" /></td>
+                             <td><input type="number" min="0" class="table-input" data-f="days_max" value="${num(v.days_max)}" aria-label="ช้าสุด ${escapeHtml(r)}" /></td>
+                           </tr>`;
+                         })
+                         .join("")}
+                     </tbody>
+                   </table>
+                 </div>
+               </details>`
+            : ""}
+          <button type="submit" class="btn btn-primary" style="margin-top: 14px;">บันทึกค่าจัดส่ง</button>
+        </form>`;
+
+      document.getElementById("shipping-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!validateRequired(e.currentTarget)) return;
+        const errorEl = document.getElementById("ship-error");
+        errorEl.style.display = "none";
+        const intOrNull = (v) => (v === "" ? null : parseInt(v, 10));
+        const region_rates = [...document.querySelectorAll("#shipping-form tr[data-region]")]
+          .map((tr) => {
+            const get = (f) => intOrNull(tr.querySelector(`[data-f="${f}"]`).value);
+            return { region: tr.dataset.region, rate: get("rate"), days_min: get("days_min"), days_max: get("days_max") };
+          })
+          .filter((r) => r.rate !== null);
+        try {
+          await saveMyShipping({
+            flat_rate: parseInt(document.getElementById("ship-flat").value, 10),
+            free_over: intOrNull(document.getElementById("ship-free").value),
+            days_min: intOrNull(document.getElementById("ship-dmin").value),
+            days_max: intOrNull(document.getElementById("ship-dmax").value),
+            region_rates,
+          });
+          showToast("บันทึกค่าจัดส่งแล้ว");
         } catch (err) {
           errorEl.textContent = err.message;
           errorEl.style.display = "block";

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ผู้ช่วยช้อปแนะนำสินค้าอย่างไร - ShopMarket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
+</head>
+<body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
+  <header class="topbar">
+    <a href="../index.html" class="logo">🛒 ShopMarket</a>
+    <div style="flex: 1"></div>
+    <span id="auth-status" data-base="../"></span>
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
+      <span class="cart-badge" id="cart-badge">0</span>
+    </a>
+  </header>
+
+  <main class="container policy-page" id="main" tabindex="-1">
+    <a href="../index.html" class="back-link">← กลับหน้าแรก</a>
+    <h1 class="page-title">ผู้ช่วยช้อปแนะนำสินค้าอย่างไร</h1>
+
+    <div class="panel">
+      <h2 class="panel-title">ผู้ช่วยช้อปทำอะไรได้บ้าง</h2>
+      <ul class="policy-list">
+        <li>ช่วยหาสินค้าตามที่คุณบอก เช่น ประเภท งบประมาณ และการใช้งาน</li>
+        <li>ช่วยเปรียบเทียบสินค้า 2–4 ชิ้น บอกจุดที่ต่างกัน</li>
+        <li>ราคา สต็อก และรายละเอียดทุกตัวเลข มาจากข้อมูลจริงในร้านเท่านั้น</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">เราเรียงสินค้าที่แนะนำอย่างไร</h2>
+      <p>สินค้าที่ผู้ช่วยแนะนำจะเรียงตามเกณฑ์เหล่านี้ ตามลำดับความสำคัญ</p>
+      <ol class="policy-list">
+        <li><b>ตรงกับที่คุณต้องการ</b> — ประเภท งบประมาณ และรายละเอียดที่คุณบอก</li>
+        <li><b>คะแนนรีวิวสินค้า</b> — จากผู้ซื้อที่ซื้อและได้รับสินค้าจริง</li>
+        <li><b>คะแนนร้านค้า</b> — จากรีวิวของสินค้าทุกชิ้นในร้าน</li>
+        <li><b>ราคารวมค่าส่ง</b> — ราคาที่คุณต้องจ่ายจริงเมื่อส่งไปจังหวัดของคุณ</li>
+      </ol>
+      <p class="alert alert-info policy-highlight">
+        <b>ไม่มีการจ่ายเงินเพื่อให้ถูกแนะนำ</b> — ร้านค้าไม่สามารถจ่ายเงินเพื่อให้ผู้ช่วยแนะนำสินค้าของตัวเอง
+        หรือเลื่อนอันดับขึ้นได้
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">สิ่งที่ผู้ช่วยไม่ทำ</h2>
+      <ul class="policy-list">
+        <li>ไม่ต่อรองราคา ไม่ให้ส่วนลด และไม่สัญญาอะไรแทนร้านค้า</li>
+        <li>ไม่บอกว่าราคาจะขึ้นหรือลง และไม่แนะนำให้รอโปรโมชัน</li>
+        <li>ไม่ตอบเรื่องที่ไม่เกี่ยวกับการเลือกซื้อสินค้า</li>
+      </ul>
+      <p>ราคาและเงื่อนไขที่ใช้จริง ให้ดูที่หน้าสินค้าเสมอ</p>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">ข้อมูลส่วนตัวของคุณ</h2>
+      <ul class="policy-list">
+        <li>อย่าพิมพ์เบอร์โทร อีเมล หรือเลขบัตรลงในช่องคุยกับผู้ช่วย
+          ถ้าพิมพ์มา ระบบจะปิดบังให้ก่อนบันทึก</li>
+        <li>ข้อความที่คุยจะถูกลบอัตโนมัติหลัง 30 วัน</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">ต้องการความช่วยเหลือเรื่องอื่น</h2>
+      <p>เรื่องคำสั่งซื้อ การจัดส่ง หรือการยกเลิก ดูได้ที่หน้าคำสั่งซื้อของคุณ</p>
+      <a href="orders.html" class="btn btn-primary">ไปที่คำสั่งซื้อของฉัน</a>
+    </div>
+  </main>
+
+  <script src="../js/api.js?v=20261009e"></script>
+</body>
+</html>

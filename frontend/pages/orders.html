@@ -10,20 +10,22 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
     <div style="flex: 1"></div>
     <span id="auth-status" data-base="../"></span>
-    <a href="cart.html" class="cart-link">
-      🛍️
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <p class="page-title">คำสั่งซื้อของฉัน</p>
     <div class="tab-bar" id="status-tabs"></div>
     <div id="orders-body"><p class="state-message">กำลังโหลด...</p></div>
@@ -31,7 +33,7 @@
 
   <div id="modal-root"></div>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=20261009e"></script>
   <script>
     const TABS = [
       { key: "ALL", label: "ทั้งหมด" },
@@ -105,7 +107,7 @@
 
       if (!orders.length) {
         body.innerHTML = `<p class="state-message">ยังไม่มีคำสั่งซื้อในหมวดนี้ —
-          <a href="../index.html" style="color: var(--chili);">ไปเลือกซื้อสินค้า</a></p>`;
+          <a href="../index.html" style="color: var(--azure);">ไปเลือกซื้อสินค้า</a></p>`;
         return;
       }
 
@@ -132,7 +134,7 @@
                 </div>
                 <div class="order-line-meta">
                   ${formatBaht(i.product_price)} × ${i.quantity}
-                  ${i.reviewed ? ' · <span style="color: var(--marigold)">รีวิวแล้ว ★</span>' : ""}
+                  ${i.reviewed ? ' · <span style="color: var(--aqua)">รีวิวแล้ว ★</span>' : ""}
                 </div>
               </div>
               <div class="cart-item-price">${formatBaht(i.subtotal)}</div>
@@ -205,8 +207,8 @@
       reviewRating = 5;
       document.getElementById("modal-root").innerHTML = `
         <div class="modal-backdrop" onclick="if(event.target===this) closeReviewModal()">
-          <div class="modal-box">
-            <h3 class="modal-title">รีวิวสินค้า</h3>
+          <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="review-title">
+            <h3 class="modal-title" id="review-title">รีวิวสินค้า</h3>
             <div class="order-line" style="border: none; padding-top: 0;">
               <div class="order-line-thumb">${productThumb(item)}</div>
               <div class="order-line-info">
@@ -215,12 +217,19 @@
               </div>
             </div>
             <p class="alert alert-error" id="review-error" style="display:none;"></p>
-            <div class="form-group">
-              <label>ให้คะแนน</label>
+            <fieldset class="form-group star-fieldset">
+              <legend>ให้คะแนน <span id="star-text">5 ดาว — ดีมาก</span></legend>
               <div class="star-input" id="star-input">
-                ${[1, 2, 3, 4, 5].map((n) => `<span class="on" data-n="${n}">★</span>`).join("")}
+                ${[1, 2, 3, 4, 5]
+                  .map(
+                    (n) => `<label class="star-option">
+                      <input type="radio" name="review-star" value="${n}" ${n === 5 ? "checked" : ""}
+                        aria-label="${n} ดาว — ${STAR_WORDS[n]}" />
+                      <span class="on" data-n="${n}" aria-hidden="true">★</span></label>`
+                  )
+                  .join("")}
               </div>
-            </div>
+            </fieldset>
             <div class="form-group">
               <label for="review-comment">ความคิดเห็น (ไม่บังคับ)</label>
               <textarea id="review-comment" rows="3" placeholder="สินค้าเป็นอย่างไรบ้าง? ตรงปกไหม?"></textarea>
@@ -236,16 +245,27 @@
           </div>
         </div>`;
 
+      // ดาวเป็น radio จริง: กดด้วยนิ้ว/เมาส์ หรือใช้ลูกศรซ้าย-ขวาบนคีย์บอร์ดก็ได้
       const stars = document.querySelectorAll("#star-input span");
-      stars.forEach((s) => {
-        s.addEventListener("click", () => {
-          reviewRating = Number(s.dataset.n);
+      document.querySelectorAll('input[name="review-star"]').forEach((r) => {
+        r.addEventListener("change", () => {
+          reviewRating = Number(r.value);
           stars.forEach((x) => x.classList.toggle("on", Number(x.dataset.n) <= reviewRating));
+          document.getElementById("star-text").textContent = `${reviewRating} ดาว — ${STAR_WORDS[reviewRating]}`;
         });
       });
+      document.querySelector('input[name="review-star"]:checked').focus();
+      document.addEventListener("keydown", escCloseReview);
+    }
+
+    const STAR_WORDS = { 1: "ไม่พอใจ", 2: "พอใช้", 3: "ปานกลาง", 4: "ดี", 5: "ดีมาก" };
+
+    function escCloseReview(e) {
+      if (e.key === "Escape") closeReviewModal();
     }
 
     function closeReviewModal() {
+      document.removeEventListener("keydown", escCloseReview);
       document.getElementById("modal-root").innerHTML = "";
     }
 

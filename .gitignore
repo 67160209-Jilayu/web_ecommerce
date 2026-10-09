@@ -18,3 +18,8 @@ db_data/
 
 # Claude Code local session settings (เครื่องใครเครื่องมัน ไม่ commit)
 .claude/settings.local.json
+
+# รันในเครื่องโดยไม่ใช้ Docker (SQLite + ไฟล์อัปโหลด)
+*.db
+backend/uploads/
+backend/.venv/
