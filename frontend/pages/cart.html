@@ -10,30 +10,32 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css?v=20261004b" />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
     <form class="search-bar" id="search-form">
-      <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
+      <input type="search" id="search-input" aria-label="ค้นหาสินค้า" placeholder="ค้นหาสินค้า..." autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
     <span id="auth-status" data-base="../"></span>
-    <a href="cart.html" class="cart-link">
-      🛍️
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <p class="page-title">ตะกร้าสินค้าของฉัน</p>
     <div id="price-notices" class="price-notice-list" role="status" aria-live="polite"></div>
-    <div id="cart-list"><p class="state-message">กำลังโหลดตะกร้า...</p></div>
+    <div id="cart-list"><p class="state-message loading">กำลังโหลดตะกร้า...</p></div>
     <div id="cart-summary-wrap"></div>
   </main>
 
-  <script src="../js/api.js?v=20261004b"></script>
+  <script src="../js/api.js?v=20261009e"></script>
   <script>
     document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -125,8 +127,12 @@
       }
 
       if (cart.items.length === 0) {
-        listEl.innerHTML = `<p class="state-message">ตะกร้าของคุณยังว่างอยู่ —
-          <a href="../index.html" style="color: var(--azure);">ไปเลือกซื้อสินค้ากันเถอะ</a></p>`;
+        listEl.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon" aria-hidden="true">🛍️</div>
+            <p>ตะกร้าของคุณยังว่างอยู่</p>
+            <a href="../index.html" class="btn btn-primary">ไปเลือกซื้อสินค้า</a>
+          </div>`;
         summaryEl.innerHTML = "";
         return;
       }
@@ -158,14 +164,23 @@
                     : ""
                 }</div>
               </div>
-              <div class="cart-item-qty">
-                <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity - 1})">−</button>
-                <span>${item.quantity}</span>
-                <button type="button" onclick="changeQty(${item.product_id}, ${item.quantity + 1})"
-                  ${item.quantity >= item.stock ? "disabled" : ""}>+</button>
+              <div class="cart-item-controls">
+                <div class="cart-item-qty" role="group" aria-label="จำนวน ${escapeHtml(item.name)}">
+                  <button type="button" aria-label="ลดจำนวน" ${item.quantity <= 1 ? "disabled" : ""}
+                    onclick="changeQty(${item.product_id}, ${item.quantity - 1})">−</button>
+                  <span aria-live="polite">${item.quantity}</span>
+                  <button type="button" aria-label="เพิ่มจำนวน"
+                    onclick="changeQty(${item.product_id}, ${item.quantity + 1})"
+                    ${item.quantity >= item.stock ? "disabled" : ""}>+</button>
+                </div>
+                <div class="cart-item-line">
+                  <span class="cart-item-line-label">รวม</span>
+                  <span class="cart-item-price">${formatBaht(item.price * item.quantity)}</span>
+                </div>
+                <button type="button" class="btn-ghost cart-item-remove-btn"
+                  onclick="removeItem(${item.product_id}, ${item.quantity})"
+                  aria-label="เอา ${escapeHtml(item.name)} ออกจากตะกร้า">🗑️ ลบออก</button>
               </div>
-              <div class="cart-item-price">${formatBaht(item.price * item.quantity)}</div>
-              <button class="cart-item-remove" onclick="removeItem(${item.product_id})">ลบ</button>
             </div>`
             )
             .join("")}
@@ -182,20 +197,20 @@
         <div class="cart-summary">
           <div>
             รวมทั้งหมด (${itemCount} ชิ้น จาก ${shopCount} ร้าน)
-            ${shopCount > 1 ? `<div style="font-size:0.78rem; opacity:0.7; margin-top:4px;">
+            ${shopCount > 1 ? `<div style="font-size: var(--fs-sm); margin-top:4px;">
               สินค้าจากต่างร้านจะถูกแยกเป็นคนละคำสั่งซื้อ</div>` : ""}
           </div>
           <div class="cart-total">${formatBaht(cart.total)}</div>
         </div>
         ${savedSinceAdd > 0
-          ? `<p style="text-align:right; color: var(--azure-dark); font-size: 0.85rem; margin-top: 8px;">
+          ? `<p style="text-align:right; color: var(--azure-dark); font-size: var(--fs-sm); margin-top: 8px;">
                ถูกกว่าตอนใส่ตะกร้ารวม ${formatBaht(savedSinceAdd)}</p>`
           : ""}
-        <div style="text-align: right; margin-top: 14px;">
-          <button class="btn btn-primary" onclick="goCheckout()">ดำเนินการสั่งซื้อ</button>
-        </div>
-        <p style="text-align:right; color: var(--muted); font-size: 0.78rem; margin-top: 8px;">
-          ยังไม่รวมค่าจัดส่ง (คำนวณในหน้าถัดไป)</p>`;
+        <p style="text-align:right; color: var(--muted); font-size: var(--fs-sm); margin-top: 8px;">
+          ยังไม่รวมค่าจัดส่ง (คำนวณในหน้าถัดไป)</p>
+        <div class="cart-checkout-row">
+          <button class="btn btn-primary btn-lg" onclick="goCheckout()">ดำเนินการสั่งซื้อ →</button>
+        </div>`;
     }
 
     /**
@@ -220,14 +235,34 @@
       }
     }
 
-    async function removeItem(productId) {
-      await changeQty(productId, 0);
+    /** เอาออกจากตะกร้า + กด "เอากลับคืน" ได้ (ใส่กลับด้วยจำนวนเดิม) */
+    async function removeItem(productId, qty) {
+      try {
+        await removeCartItem(productId);
+        await renderCartBadge();
+        await renderCart();
+        showToast("เอาสินค้าออกจากตะกร้าแล้ว", "success", {
+          label: "เอากลับคืน",
+          onClick: async () => {
+            try {
+              await addToCart(productId, qty || 1);
+              await renderCartBadge();
+              await renderCart();
+              showToast("ใส่กลับเข้าตะกร้าแล้ว");
+            } catch (err) {
+              showToast(err.message, "error");
+            }
+          },
+        });
+      } catch (err) {
+        showToast(err.message, "error");
+      }
     }
 
     function goCheckout() {
       if (!isLoggedIn()) {
-        showToast("กรุณาเข้าสู่ระบบก่อนสั่งซื้อ", "error");
-        setTimeout(() => requireLogin("../"), 900);
+        showToast("กรุณาเข้าสู่ระบบก่อนสั่งซื้อ กำลังพาไปหน้าเข้าสู่ระบบ...");
+        setTimeout(() => requireLogin("../"), 1500);
         return;
       }
       window.location.href = "checkout.html";

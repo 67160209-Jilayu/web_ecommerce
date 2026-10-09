@@ -435,7 +435,10 @@ def nightly_recompute(session: Session, now: Optional[datetime] = None) -> dict:
         recompute_price_ref(session, sku_id, now=now)
     notices = sync_cart_notices(session, now=now)
     session.commit()
-    return {"backfilled": backfilled, "refs": len(sku_ids), "notices": notices}
+    from app import chat  # import ที่นี่เพื่อเลี่ยง import วน
+
+    purged = chat.purge_old(session, now=now)   # log แชทเก็บไม่เกิน 30 วัน
+    return {"backfilled": backfilled, "refs": len(sku_ids), "notices": notices, "chat_purged": purged}
 
 
 if __name__ == "__main__":  # python -m app.pricing  (รันจากโฟลเดอร์ backend)

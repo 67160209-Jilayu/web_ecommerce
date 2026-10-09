@@ -103,3 +103,45 @@ def test_phase2_ui_hooks_present(client):
     assert "shipping-form" in client.get("/pages/seller.html").text
     checkout = client.get("/pages/checkout.html").text
     assert 'id="province"' in checkout
+
+
+# ------------------------------------------------------------------ เฟส 3 UI
+
+def test_chat_policy_page(client):
+    r = client.get("/pages/chat-policy.html")
+    assert r.status_code == 200
+    assert "ไม่มีการจ่ายเงินเพื่อให้ถูกแนะนำ" in r.text
+
+
+def test_chat_js_loaded_on_entry_pages_and_uses_endpoints(client):
+    for page in ("/", "/pages/product-detail.html", "/pages/compare.html"):
+        assert re.search(r'<script[^>]+src="[^"]*js/chat\.js(\?v=[\w.-]+)?"', client.get(page).text), page
+    js = client.get("/js/chat.js").text
+    for ep in ("/chat", "/chat/config", "/chat/guided", "/chat/feedback"):
+        assert ep in js, ep
+    assert "text/event-stream" in js or "getReader" in js  # อ่าน SSE แบบ stream
+    assert "aria-live" in js  # ข้อความ stream อ่านออกเสียงได้
+    assert "ถามผู้ช่วย" in js or "ถามผู้ช่วย" in client.get("/").text
+
+
+def test_chat_js_endpoints_exist(client):
+    pats = _route_patterns(client.app)
+    js = client.get("/js/chat.js").text
+    for method, path in _js_api_calls(js) or []:
+        assert any(rx.match(path) and method in ms for rx, ms in pats), f"{method} {path}"
+    for path in ("/api/chat", "/api/chat/config", "/api/chat/guided", "/api/chat/feedback"):
+        assert any(rx.match(path) for rx, _ in pats), path
+
+
+@pytest.mark.parametrize("page", ["/", "/pages/cart.html", "/pages/checkout.html", "/pages/compare.html",
+                                  "/pages/login.html", "/pages/orders.html", "/pages/product-detail.html",
+                                  "/pages/product-form.html", "/pages/seller.html", "/pages/shop.html",
+                                  "/pages/chat-policy.html"])
+def test_skip_link_on_every_page(client, page):
+    assert "skip-link" in client.get(page).text, page
+
+
+def test_form_helpers_present(client):
+    js = client.get("/js/api.js").text
+    for fn in ("validateRequired", "setFieldError", "showToast"):
+        assert f"function {fn}" in js or f"{fn} =" in js, fn

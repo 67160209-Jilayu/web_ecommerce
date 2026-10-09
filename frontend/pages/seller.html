@@ -10,24 +10,26 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css?v=20261004b" />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
     <div style="flex: 1"></div>
     <span id="auth-status" data-base="../"></span>
-    <a href="cart.html" class="cart-link">
-      🛍️
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <div id="seller-body"><p class="state-message">กำลังโหลด...</p></div>
   </main>
 
-  <script src="../js/api.js?v=20261004b"></script>
+  <script src="../js/api.js?v=20261009e"></script>
   <script>
     let myShop = null;
     let activeTab = "products";
@@ -64,7 +66,7 @@
             หลังเปิดร้านแล้วคุณจะลงขายสินค้าและรับคำสั่งซื้อได้ทันที
           </p>
           <p class="alert alert-error" id="shop-error" style="display:none;"></p>
-          <form id="open-shop-form">
+          <form id="open-shop-form" novalidate>
             <div class="form-group">
               <label for="shop-name">ชื่อร้าน *</label>
               <input type="text" id="shop-name" required maxlength="60" placeholder="เช่น บ้านสวนของฝาก" />
@@ -79,6 +81,7 @@
 
       document.getElementById("open-shop-form").addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!validateRequired(e.currentTarget)) return;
         const errorEl = document.getElementById("shop-error");
         errorEl.style.display = "none";
         try {
@@ -104,8 +107,7 @@
             <span>สินค้า ${myShop.product_count} รายการ</span>
             <span>${myShop.review_count > 0 ? `⭐ ${myShop.rating} (${myShop.review_count} รีวิว)` : "ยังไม่มีรีวิว"}</span>
             <span>${myShop.is_verified ? "✅ ร้านยืนยันแล้ว" : "ร้านทั่วไป"}</span>
-            <a href="shop.html?id=${myShop.id}" style="color: var(--aqua-light); text-decoration: underline;">
-              ดูหน้าร้านแบบลูกค้าเห็น →</a>
+            <a href="shop.html?id=${myShop.id}" class="banner-link">ดูหน้าร้านแบบที่ลูกค้าเห็น →</a>
           </div>
         </div>
 
@@ -419,7 +421,7 @@
         <div class="panel" style="max-width: 520px;">
           <h2 class="panel-title" style="margin-bottom: 16px;">ตั้งค่าร้าน</h2>
           <p class="alert alert-error" id="settings-error" style="display:none;"></p>
-          <form id="settings-form">
+          <form id="settings-form" novalidate>
             <div class="form-group">
               <label for="edit-shop-name">ชื่อร้าน</label>
               <input type="text" id="edit-shop-name" value="${escapeHtml(myShop.name)}" maxlength="60" required />
@@ -438,6 +440,7 @@
 
       document.getElementById("settings-form").addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!validateRequired(e.currentTarget)) return;
         const errorEl = document.getElementById("settings-error");
         errorEl.style.display = "none";
         try {
@@ -477,7 +480,7 @@
           ลูกค้าจะเห็นค่าส่งและราคารวมไปจังหวัดของตัวเองในหน้าเปรียบเทียบ
           สินค้าที่ติ๊ก "จัดส่งฟรี" ไว้จะไม่คิดค่าส่ง</p>
         <p class="alert alert-error" id="ship-error" style="display:none;"></p>
-        <form id="shipping-form">
+        <form id="shipping-form" novalidate>
           <div class="form-grid">
             <div class="form-group">
               <label for="ship-flat">ค่าส่งทั่วประเทศ *</label>
@@ -533,6 +536,7 @@
 
       document.getElementById("shipping-form").addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!validateRequired(e.currentTarget)) return;
         const errorEl = document.getElementById("ship-error");
         errorEl.style.display = "none";
         const intOrNull = (v) => (v === "" ? null : parseInt(v, 10));

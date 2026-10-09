@@ -319,10 +319,11 @@ function renderCartDot(cart) {
     }
     const label = `มีสินค้าในตะกร้าลดราคา ${count} รายการ`;
     dot.title = label;
-    dot.setAttribute("aria-label", label);
-    dot.setAttribute("role", "status");
-  } else if (dot) {
-    dot.remove();
+    dot.setAttribute("aria-hidden", "true");
+    link.setAttribute("aria-label", `ตะกร้าสินค้า — ${label}`);
+  } else {
+    dot?.remove();
+    link.setAttribute("aria-label", "ตะกร้าสินค้า");
   }
 }
 
@@ -337,14 +338,16 @@ async function renderAuthStatus() {
     el.innerHTML = `
       <a href="${base}pages/orders.html" class="auth-link">คำสั่งซื้อ</a>
       <a href="${base}pages/seller.html" class="auth-link">ร้านของฉัน</a>
-      <span class="auth-name">${escapeHtml(user.name)}</span>
-      <button type="button" class="auth-link-btn" onclick="handleLogoutClick()">ออกจากระบบ</button>`;
+      <span class="auth-name">👤 ${escapeHtml(user.name)}</span>
+      <button type="button" class="auth-link-btn auth-logout" onclick="handleLogoutClick()">ออกจากระบบ</button>`;
+    el.setAttribute("aria-label", `เข้าสู่ระบบแล้วในชื่อ ${user.name}`);
   } else {
     el.innerHTML = `<a href="${base}pages/login.html" class="auth-link">เข้าสู่ระบบ</a>`;
   }
 }
 
 function handleLogoutClick() {
+  if (!confirm("ต้องการออกจากระบบใช่ไหม?")) return;
   logoutAccount();
   renderAuthStatus();
   renderCartBadge();
@@ -362,7 +365,12 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /** แจ้งผลลัพธ์แบบ toast ลอยด้านล่าง (ใช้แทน alert() ให้ไม่ขัดจังหวะผู้ใช้) */
-function showToast(message, type = "success") {
+/**
+ * แจ้งผลแบบ toast ลอยด้านล่าง
+ * action = {label, onClick} → มีปุ่ม (เช่น "เอากลับคืน") และค้างนานขึ้นให้กดทัน
+ * error ใช้ role="alert" ให้โปรแกรมอ่านหน้าจออ่านทันที
+ */
+function showToast(message, type = "success", action = null) {
   let toast = document.getElementById("app-toast");
   if (!toast) {
     toast = document.createElement("div");
@@ -370,13 +378,90 @@ function showToast(message, type = "success") {
     toast.className = "toast";
     document.body.appendChild(toast);
   }
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+  toast.setAttribute("aria-live", type === "error" ? "assertive" : "polite");
   toast.textContent = message;
-  toast.className = `toast show${type === "error" ? " error" : ""}`;
+  if (action) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "toast-action";
+    btn.textContent = action.label;
+    btn.addEventListener("click", () => {
+      toast.className = "toast";
+      action.onClick();
+    });
+    toast.appendChild(btn);
+  }
+  toast.className = `toast show${type === "error" ? " error" : ""}${action ? " has-action" : ""}`;
   clearTimeout(toast._timer);
+  // ผู้ใช้สูงวัยอ่านช้ากว่า: ข้อความทั่วไป 4 วินาที, มีปุ่มให้กด 7 วินาที
   toast._timer = setTimeout(() => {
     toast.className = "toast";
-  }, 2800);
+  }, action ? 7000 : 4000);
 }
+
+/** แจ้งว่าเพิ่มลงตะกร้าแล้ว พร้อมปุ่มไปดูตะกร้า */
+function showAddedToCart() {
+  showToast("เพิ่มลงตะกร้าแล้ว ✓", "success", {
+    label: "ดูตะกร้า",
+    onClick: () => (window.location.href = `${pageBase()}pages/cart.html`),
+  });
+}
+
+/** แสดง/ล้างข้อความผิดพลาดใต้ช่องกรอก (ไม่ลบสิ่งที่ผู้ใช้กรอกไว้) */
+function setFieldError(input, message) {
+  if (!input) return;
+  const id = `${input.id}-error`;
+  let el = document.getElementById(id);
+  if (!message) {
+    input.removeAttribute("aria-invalid");
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement("span");
+    el.id = id;
+    el.className = "field-error";
+    (input.closest(".unit-input, .password-row, .cart-item-qty") || input).insertAdjacentElement("afterend", el);
+  }
+  el.textContent = message;
+  input.setAttribute("aria-invalid", "true");
+  input.setAttribute("aria-describedby", id);
+}
+
+/**
+ * ตรวจช่องที่ต้องกรอกในฟอร์มด้วยข้อความภาษาไทยที่บอกวิธีแก้
+ * คืน true ถ้าผ่าน; ไม่ผ่าน → ขึ้นข้อความใต้ช่องแรกที่ผิด แล้วเลื่อนไป focus ช่องนั้น
+ */
+function validateRequired(form) {
+  let first = null;
+  form.querySelectorAll("input, select, textarea").forEach((el) => {
+    if (el.disabled || el.type === "hidden" || el.type === "file") return;
+    let msg = "";
+    const label = el.labels?.[0]?.textContent.replace("*", "").trim() || "ช่องนี้";
+    if (el.required && !String(el.value).trim()) msg = `กรุณากรอก${label}`;
+    else if (el.type === "email" && el.value && !el.checkValidity()) msg = "รูปแบบอีเมลไม่ถูกต้อง เช่น somchai@gmail.com";
+    else if (el.type === "number" && el.value !== "" && el.min !== "" && Number(el.value) < Number(el.min))
+      msg = `${label}ต้องไม่น้อยกว่า ${el.min}`;
+    else if (el.type === "tel" && el.value) {
+      const digits = el.value.replace(/\D/g, "");
+      if (digits.length < 9 || digits.length > 10) msg = "เบอร์โทรควรเป็นตัวเลข 9–10 หลัก เช่น 0812345678";
+    } else if (el.minLength > 0 && el.value && el.value.length < el.minLength)
+      msg = `${label}ต้องยาวอย่างน้อย ${el.minLength} ตัวอักษร`;
+    setFieldError(el, msg);
+    if (msg && !first) first = el;
+  });
+  if (first) {
+    first.scrollIntoView({ block: "center" });
+    first.focus({ preventScroll: true });
+  }
+  return !first;
+}
+
+/** ล้างข้อความผิดพลาดของช่องทันทีที่ผู้ใช้เริ่มแก้ */
+document.addEventListener("input", (e) => {
+  if (e.target.getAttribute?.("aria-invalid") === "true") setFieldError(e.target, "");
+});
 
 /** แปลง ISO date เป็นรูปแบบไทยอ่านง่าย */
 function formatDate(iso) {
@@ -496,14 +581,15 @@ function compareButtonHtml(p, extraClass = "") {
   _compareSeen[lite.id] = lite;
   const on = isInCompare(lite.id);
   return `<button type="button" class="compare-btn ${on ? "on" : ""} ${extraClass}" data-compare-id="${lite.id}"
-    aria-pressed="${on}" onclick="event.stopPropagation(); toggleCompare(${lite.id})">${on ? "✓ ในถาดเทียบ" : "+ เทียบ"}</button>`;
+    title="เพิ่มเข้าถาดเพื่อเปรียบเทียบกับสินค้าอื่น (สูงสุด ${COMPARE_MAX} ชิ้น)"
+    aria-pressed="${on}" onclick="event.stopPropagation(); toggleCompare(${lite.id})">${on ? "✓ เลือกเทียบแล้ว" : "+ เทียบ"}</button>`;
 }
 
 function updateCompareButton(btn) {
   const on = isInCompare(Number(btn.dataset.compareId));
   btn.classList.toggle("on", on);
   btn.setAttribute("aria-pressed", on);
-  btn.textContent = on ? "✓ ในถาดเทียบ" : "+ เทียบ";
+  btn.textContent = on ? "✓ เลือกเทียบแล้ว" : "+ เทียบ";
 }
 
 /** เพิ่มเข้าถาด — รับได้ทั้งสินค้าเต็มจาก API และข้อมูลย่อ */
@@ -526,6 +612,16 @@ function removeFromCompare(id) {
   setCompareItems(getCompareItems().filter((x) => x.id !== id));
 }
 
+/** ล้างถาดทั้งหมด แต่กด "เอากลับคืน" ได้ภายใน 7 วินาที */
+function clearCompareWithUndo() {
+  const before = getCompareItems();
+  setCompareItems([]);
+  showToast("ล้างถาดเทียบแล้ว", "success", {
+    label: "เอากลับคืน",
+    onClick: () => setCompareItems(before),
+  });
+}
+
 function toggleCompare(id) {
   if (isInCompare(id)) removeFromCompare(id);
   else if (_compareSeen[id]) addToCompare(_compareSeen[id]);
@@ -535,14 +631,17 @@ function compareUrl(ids) {
   return `${pageBase()}pages/compare.html?ids=${ids.join(",")}`;
 }
 
+let _trayExpanded = false; // มือถือ: ถาดย่อเป็นแถบเดียว กดเพื่อกาง
+
 function renderCompareTray() {
-  // หน้าเทียบมีตารางอยู่แล้ว ไม่ต้องมีถาด
-  if (/\/compare\.html$/.test(window.location.pathname)) return;
+  // หน้าเทียบมีตารางอยู่แล้ว / หน้าตะกร้า-ชำระเงิน-ล็อกอิน ต้องไม่มีอะไรมาบังปุ่มหลัก
+  if (/\/(compare|cart|checkout|login)\.html$/.test(window.location.pathname)) return;
   let tray = document.getElementById("compare-tray");
   const items = getCompareItems();
   if (!items.length) {
     tray?.remove();
     document.body.classList.remove("has-compare-tray");
+    _trayExpanded = false;
     return;
   }
   if (!tray) {
@@ -553,29 +652,45 @@ function renderCompareTray() {
     tray.setAttribute("aria-label", "ถาดเปรียบเทียบสินค้า");
     document.body.appendChild(tray);
   }
+  tray.classList.toggle("expanded", _trayExpanded);
   document.body.classList.add("has-compare-tray");
   const slots = Array.from({ length: COMPARE_MAX }, (_, i) => items[i]);
+  const goBtn =
+    items.length >= 2
+      ? `<a class="btn btn-primary btn-sm" href="${compareUrl(items.map((x) => x.id))}">เปรียบเทียบ ${items.length} ชิ้น</a>`
+      : `<span class="compare-hint">เลือกสินค้าอีกอย่างน้อย 1 ชิ้นเพื่อเทียบ</span>`;
   tray.innerHTML = `
-    <div class="compare-tray-items">
-      ${slots
-        .map((it) =>
-          it
-            ? `<div class="compare-slot" title="${escapeHtml(it.name)}">
-                 <div class="compare-slot-thumb">${productThumb(it)}</div>
-                 <span class="compare-slot-name">${escapeHtml(it.name)}</span>
-                 <button type="button" class="compare-slot-remove" aria-label="เอาออกจากถาดเทียบ"
-                   onclick="removeFromCompare(${it.id})">✕</button>
-               </div>`
-            : `<div class="compare-slot empty" aria-hidden="true">+</div>`
-        )
-        .join("")}
-    </div>
-    <div class="compare-tray-actions">
-      <button type="button" class="btn-ghost compare-clear" onclick="setCompareItems([])">ล้าง</button>
-      ${items.length >= 2
-        ? `<a class="btn btn-primary btn-sm" href="${compareUrl(items.map((x) => x.id))}">เปรียบเทียบ (${items.length})</a>`
-        : `<span class="compare-hint">เลือกอีกอย่างน้อย 1 ชิ้น</span>`}
+    <button type="button" class="compare-tray-toggle" aria-expanded="${_trayExpanded}" aria-controls="compare-tray-body"
+      onclick="toggleCompareTray()">
+      <span>⚖️ เลือกเทียบไว้ ${items.length} ชิ้น</span>
+      <span class="compare-tray-toggle-hint">${_trayExpanded ? "ย่อ ▾" : "ดู/เทียบ ▴"}</span>
+    </button>
+    <div class="compare-tray-body" id="compare-tray-body">
+      <ul class="compare-tray-items" aria-label="สินค้าที่เลือกเทียบ">
+        ${slots
+          .map((it) =>
+            it
+              ? `<li class="compare-slot">
+                   <div class="compare-slot-thumb">${productThumb(it)}</div>
+                   <span class="compare-slot-name">${escapeHtml(it.name)}</span>
+                   <button type="button" class="compare-slot-remove" aria-label="เอา ${escapeHtml(it.name)} ออกจากถาดเทียบ"
+                     onclick="removeFromCompare(${it.id})"><span aria-hidden="true">✕</span><span class="compare-slot-remove-text">เอาออก</span></button>
+                 </li>`
+              : `<li class="compare-slot empty" aria-hidden="true">ว่าง</li>`
+          )
+          .join("")}
+      </ul>
+      <div class="compare-tray-actions">
+        <button type="button" class="btn-ghost compare-clear" onclick="clearCompareWithUndo()">ล้างทั้งหมด</button>
+        ${goBtn}
+      </div>
     </div>`;
+}
+
+function toggleCompareTray() {
+  _trayExpanded = !_trayExpanded;
+  renderCompareTray();
+  document.querySelector(".compare-tray-toggle")?.focus();
 }
 
 /** ล็อกอินแล้วและเครื่องนี้ยังไม่มีรายการ → ดึงถาดที่บันทึกไว้ในบัญชีมาใช้ */
@@ -634,7 +749,7 @@ function provinceOptionsHtml(provinces, selected) {
 /** ป้าย "ข้อมูลครบ" — ผู้ขายกรอกสเปกที่จำเป็นครบตามแม่แบบหมวด */
 function specCompleteBadge(p) {
   return p && p.spec_complete
-    ? `<span class="badge-spec-complete" title="ผู้ขายกรอกสเปกที่จำเป็นครบ เทียบกับสินค้าอื่นได้ทุกแถว">✓ ข้อมูลครบ</span>`
+    ? `<span class="badge-spec-complete" title="ร้านใส่รายละเอียดสินค้าครบ เทียบกับสินค้าอื่นได้ง่าย">✓ ข้อมูลครบ</span>`
     : "";
 }
 

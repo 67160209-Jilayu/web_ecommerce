@@ -33,7 +33,17 @@ HANDOFF_LINKS = [
     {"label": "คำสั่งซื้อของฉัน", "url": "/pages/orders.html"},
     {"label": "นโยบายและเกณฑ์การแนะนำ", "url": "/pages/chat-policy.html"},
 ]
-DISCLAIMER = "ตอบโดย AI อาจผิดพลาดได้ ราคาและเงื่อนไขที่ใช้จริงดูที่หน้าสินค้า อย่าใส่ข้อมูลส่วนตัว"
+DISCLAIMER = "คำตอบจากระบบอัตโนมัติ อาจผิดพลาดได้ ราคาจริงดูที่หน้าสินค้า อย่าใส่ข้อมูลส่วนตัว"
+PROMISE_TEXT = (
+    "ผมรับรองหรือให้คำมั่นแทนร้านค้าไม่ได้ครับ ดูรีวิวจากผู้ซื้อจริงและข้อมูลร้านได้ที่หน้าสินค้า "
+    "ส่วนเงื่อนไขการคืนสินค้าดูได้ที่หน้านโยบายครับ"
+)
+
+# ข้อความตอบตามเหตุผลที่ถูกกันในชั้น 1 (ให้ตรงกับสิ่งที่ผู้ใช้ถาม ไม่ใช่ข้อความเดียวทุกกรณี)
+BLOCK_REPLIES = {
+    "promise": PROMISE_TEXT,
+    "off_scope_task": OFF_TOPIC_TEXT,
+}
 
 # =====================================================================
 # ชั้น 1: ขาเข้า (ไม่เสีย token)
@@ -46,20 +56,30 @@ _PHONE = re.compile(r"(?:\+66[ -]?|(?<!\d)0)(?:\d[ -]?){7,8}\d(?!\d)")
 
 # คำสั่งแทรก / เปลี่ยนบทบาท / ขอดู system prompt / ต่อรองราคา / ขอส่วนลด / คู่แข่ง
 _BLOCK_PATTERNS = [
-    (r"ignore (all |the )?(previous|above|prior)|disregard (all |the )?(previous|above)|forget (all |your )?(previous )?instructions", "injection"),
-    (r"ลืม(คำสั่ง|ที่บอก|กฎ)|ไม่ต้องสนใจ(คำสั่ง|กฎ)|ยกเลิกคำสั่ง|ข้ามกฎ", "injection"),
-    (r"system prompt|ระบบพรอมต์|ซิสเต็มพรอมต์|พรอมต์ของคุณ|คำสั่งตั้งต้น|developer mode|jailbreak|\bDAN\b", "system_prompt"),
-    (r"you are now|act as|pretend (to be|you)|role[- ]?play|สวมบทบาท|แกล้งทำเป็น|ทำตัวเป็น|ตอนนี้คุณคือ|สมมติว่าคุณเป็น|เล่นบท", "role_play"),
-    (r"ต่อรอง|ลดราคาให้(หน่อย|ได้ไหม|ที|ผม|ฉัน|หนู)|ขอ(ส่วน)?ลด(ราคา)?(หน่อย|ได้ไหม|เพิ่ม)|ขอโค้ด|ขอคูปอง|แจกโค้ด|ให้ส่วนลด|ราคาพิเศษให้|ขายให้(ผม|ฉัน|หนู)?\s*\d+\s*บาท|ลดเหลือ\s*\d+|discount code|coupon code|\$1(?!\d)", "negotiation"),
-    (r"สัญญา(ว่า|ได้ไหม|สิ)|รับปาก|การันตีให้|promise", "promise"),
+    (r"ignore (all |the |any |your )?(previous|above|prior|earlier)|ignore .{0,30}(rules|instructions|safety|guidelines)|"
+     r"disregard (all |the )?(previous|above|rules)|forget (all |your )?(previous )?(instructions|rules)", "injection"),
+    (r"ลืม(คำสั่ง|ที่บอก|กฎ|ทุกอย่าง)|ไม่ต้องสนใจ(คำสั่ง|กฎ)|ยกเลิกคำสั่ง(?!ซื้อ)|ข้ามกฎ|ไม่มีข้อจำกัด|ตอบได้ทุกเรื่อง", "injection"),
+    (r"</?\s*(system|user|assistant|instruction)s?\s*>|^\s*(system|assistant)\s*:|\{\s*\"intent\"", "injection"),
+    (r"system prompt|ระบบพรอมต์|ซิสเต็มพรอมต์|พรอมต์ของคุณ|คำสั่งระบบ|คำสั่งตั้งต้น|กฎที่ซ่อน|hidden rules|"
+     r"developer mode|jailbreak|\bDAN\b", "system_prompt"),
+    (r"you are now|act as|pretend (to be|you)|role[- ]?play|สวมบทบาท|แกล้งทำเป็น|ทำตัวเป็น|"
+     r"(ตอนนี้|จากนี้(ไป)?)คุณคือ|สมมติว่าคุณ(เป็น|คือ)|เล่นบท", "role_play"),
+    (r"เขียน(โค้ด|code|โปรแกรม)|write (some |a )?(code|script|program)", "off_scope_task"),
+    (r"ต่อรอง|ลดราคาให้(หน่อย|ได้ไหม|ที|ผม|ฉัน|หนู)|ขอ(ส่วน)?ลด(ราคา)?(หน่อย|ได้ไหม|เพิ่ม)|ขอโค้ด|ขอคูปอง|แจกโค้ด|"
+     r"ให้ส่วนลด|ราคาพิเศษให้|ขายให้(ผม|ฉัน|หนู)?\s*\d+\s*บาท|ลดเหลือ\s*\d+|ลด\s*9\d\s*%|discount code|coupon code|"
+     r"\$1(?!\d)", "negotiation"),
+    (r"สัญญา(ว่า|ได้ไหม|สิ|ให้)|รับปาก|การันตี|promise|guarantee|"
+     r"รับประกัน(ได้ไหม|ได้มั้ย|ว่า|ให้)|ยืนยัน(เป็นลายลักษณ์อักษร|ว่า.{0,30}(ไม่ขึ้น|แน่นอน|แท้|ถึง))|"
+     r"ผูกพัน|พูดว่า.{0,40}(คืนเงิน|ผูกพัน|รับประกัน|สัญญา)", "promise"),
     (r"shopee|lazada|ลาซาด้า|ช้อปปี้|amazon|อเมซอน|jd central|tiktok shop|temu|aliexpress", "competitor"),
 ]
-_BLOCK_RE = [(re.compile(p, re.I), reason) for p, reason in _BLOCK_PATTERNS]
+_BLOCK_RE = [(re.compile(p, re.I | re.M), reason) for p, reason in _BLOCK_PATTERNS]
 
 _PRICE_TREND_RE = re.compile(
-    r"เคยถูกกว่า|เคยลด|ราคาย้อนหลัง|ประวัติราคา|แนวโน้มราคา|ราคาจะ(ลด|ขึ้น)|จะลดราคา(ไหม|มั้ย|อีก)|"
-    r"(ควร|น่า)รอ(โปร|ลด|ราคา|ก่อน)|รอโปร|รอ(ช่วง)?ลดราคา|ถูกลงไหม|ถูกลงมั้ย|ลดอีกไหม|"
-    r"price history|cheaper before|wait for (a )?(sale|discount)|will the price drop",
+    r"เคยถูก|เคยลด|ราคาย้อนหลัง|ประวัติราคา|แนวโน้มราคา|กราฟราคา|ราคา.{0,10}(เดือน|ปี)ที่(ผ่านมา|แล้ว)|"
+    r"ต่ำสุดใน\s*\d+\s*วัน|ราคาจะ(ลด|ขึ้น|ลง)|จะลดราคา|จะลดไหม|ราคาจะลงไหม|"
+    r"(ควร|น่า)รอ(โปร|ลด|ราคา|ก่อน|แคมเปญ|ช่วง|เซล|ซื้อ)|รอโปร|รอซื้อ|รอ(วัน)?\s*\d{1,2}\.\d{1,2}|รอ(ช่วง)?ลดราคา|รอแคมเปญ|ถูกลงไหม|ถูกลงมั้ย|ลดอีกไหม|"
+    r"price history|price chart|cheaper before|wait for (a )?(sale|discount)|will the price drop",
     re.I,
 )
 

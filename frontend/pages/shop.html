@@ -10,28 +10,30 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css?v=20261004b" />
+  <link rel="stylesheet" href="../css/style.css?v=20261009e" />
 </head>
 <body>
+  <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="../index.html" class="logo">🛒 ShopMarket</a>
     <form class="search-bar" id="search-form">
-      <input type="text" id="search-input" placeholder="ค้นหาสินค้า..." autocomplete="off" />
+      <input type="search" id="search-input" aria-label="ค้นหาสินค้า" placeholder="ค้นหาสินค้า..." autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
     <span id="auth-status" data-base="../"></span>
-    <a href="cart.html" class="cart-link">
-      🛍️
+    <a href="cart.html" class="cart-link" aria-label="ตะกร้าสินค้า">
+      <span aria-hidden="true">🛍️</span>
+      <span class="icon-label">ตะกร้า</span>
       <span class="cart-badge" id="cart-badge">0</span>
     </a>
   </header>
 
-  <main class="container">
+  <main class="container" id="main" tabindex="-1">
     <a href="../index.html" class="back-link">← กลับหน้าแรก</a>
     <div id="shop-body"><p class="state-message">กำลังโหลดข้อมูลร้าน...</p></div>
   </main>
 
-  <script src="../js/api.js?v=20261004b"></script>
+  <script src="../js/api.js?v=20261009e"></script>
   <script>
     document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();

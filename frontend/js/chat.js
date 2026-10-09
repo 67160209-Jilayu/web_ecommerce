@@ -70,7 +70,7 @@
   function build() {
     root = el(`<div class="chat-root"></div>`);
     launcher = el(`<button type="button" class="chat-launcher" aria-haspopup="dialog" aria-expanded="false">
-        <span aria-hidden="true">💬</span><span class="chat-launcher-text">ถามผู้ช่วยช้อป</span></button>`);
+        <span aria-hidden="true">💬</span><span class="chat-launcher-text">ถามผู้ช่วย</span></button>`);
     panel = el(`
       <section class="chat-panel" role="dialog" aria-modal="false" aria-labelledby="chat-title" hidden>
         <header class="chat-head">
@@ -79,19 +79,22 @@
             <div class="chat-sub">ช่วยหาและเทียบสินค้าจากข้อมูลจริงในร้าน</div>
           </div>
           <div class="chat-head-actions">
-            <button type="button" class="chat-icon-btn" data-act="reset" title="เริ่มคุยใหม่" aria-label="เริ่มคุยใหม่">↺</button>
-            <button type="button" class="chat-icon-btn" data-act="close" title="ปิด" aria-label="ปิดแชท">✕</button>
+            <button type="button" class="chat-head-btn" data-act="reset" aria-label="เริ่มคุยใหม่"><span aria-hidden="true">↺</span> เริ่มใหม่</button>
+            <button type="button" class="chat-head-btn" data-act="close" aria-label="ปิดหน้าต่างผู้ช่วย"><span aria-hidden="true">✕</span> ปิด</button>
           </div>
         </header>
         <div class="chat-list" role="log" aria-live="polite" aria-relevant="additions"></div>
         <form class="chat-form">
           <div class="chat-input-row">
             <textarea class="chat-input" rows="1" aria-label="พิมพ์คำถาม"
-              placeholder="เช่น หาหูฟังไร้สาย งบไม่เกิน 1,500"></textarea>
-            <button type="submit" class="chat-send" aria-label="ส่ง">➤</button>
+              placeholder="พิมพ์คำถาม เช่น หาหูฟังไร้สาย งบไม่เกิน 1,500"></textarea>
+            <button type="submit" class="chat-send" aria-label="ส่งคำถาม"><span aria-hidden="true">➤</span><span class="chat-send-text">ส่ง</span></button>
           </div>
           <div class="chat-foot">
             <span class="chat-disclaimer"></span>
+          </div>
+          <div class="chat-foot">
+            <span class="chat-mic-hint">🎤 พิมพ์ไม่ถนัด? กดรูปไมค์บนแป้นพิมพ์มือถือแล้วพูดได้</span>
             <span class="chat-counter"></span>
           </div>
         </form>
@@ -104,7 +107,7 @@
     sendBtn = panel.querySelector(".chat-send");
     counter = panel.querySelector(".chat-counter");
     panel.querySelector(".chat-disclaimer").textContent =
-      config.disclaimer || "ตอบโดย AI อาจผิดพลาดได้ ราคาและเงื่อนไขที่ใช้จริงดูที่หน้าสินค้า อย่าใส่ข้อมูลส่วนตัว";
+      config.disclaimer || "คำตอบจากระบบอัตโนมัติ อาจผิดพลาดได้ ราคาจริงดูที่หน้าสินค้า อย่าใส่ข้อมูลส่วนตัว";
 
     launcher.addEventListener("click", () => open());
     panel.querySelector('[data-act="close"]').addEventListener("click", close);
@@ -237,9 +240,9 @@
         ${m.message_id && !m.pending
           ? `<div class="chat-feedback" role="group" aria-label="คำตอบนี้มีประโยชน์ไหม">
                <button type="button" class="chat-fb ${m.feedback === "up" ? "on" : ""}" data-act="fb" data-v="up"
-                 aria-pressed="${m.feedback === "up"}" title="มีประโยชน์">👍</button>
+                 aria-pressed="${m.feedback === "up"}">👍 ช่วยได้</button>
                <button type="button" class="chat-fb ${m.feedback === "down" ? "on" : ""}" data-act="fb" data-v="down"
-                 aria-pressed="${m.feedback === "down"}" title="ไม่มีประโยชน์">👎</button>
+                 aria-pressed="${m.feedback === "down"}">👎 ไม่ช่วย</button>
              </div>`
           : ""}
       </div>`;
@@ -251,20 +254,33 @@
     return url;
   }
 
+  /** คำถามตัวอย่างที่ต้องมี "สินค้าที่กำลังดู" (เช่น "สองชิ้นนี้") ใช้ได้เฉพาะหน้าสินค้า/หน้าเทียบ */
+  function usableSamples() {
+    const all = config?.sample_questions || [];
+    const hasContext = !!contextSkuId || /\/compare\.html$/.test(window.location.pathname);
+    return hasContext ? all : all.filter((q) => !/ชิ้นนี้|อันนี้|ตัวนี้/.test(q));
+  }
+
   function welcomeHtml() {
-    const samples = config?.sample_questions || [];
+    const samples = usableSamples();
     return `
       <div class="chat-msg model welcome">
         <div class="chat-bubble">สวัสดีครับ ผมช่วยหาและเปรียบเทียบสินค้าในร้านได้ บอกได้เลยว่าอยากได้อะไร งบเท่าไหร่ ใช้ทำอะไร${
           contextSkuId ? " หรือถามเกี่ยวกับสินค้าที่เปิดดูอยู่ก็ได้ครับ" : ""
         }</div>
         ${chipsHtml(samples, "sample")}
+        <button type="button" class="btn-ghost chat-easy-btn" data-act="easy">
+          👆 ไม่อยากพิมพ์? เลือกจากปุ่มทีละขั้น</button>
         <div class="chat-policy-link"><a href="${base()}pages/chat-policy.html">ผู้ช่วยแนะนำสินค้าอย่างไร?</a></div>
       </div>`;
   }
 
   function renderAll() {
-    list.innerHTML = (log.length ? "" : welcomeHtml()) + log.map(msgHtml).join("");
+    // เปิดแชทเดิมที่คุยค้างไว้ → บอกให้รู้ว่าเริ่มเรื่องใหม่ได้
+    const resumeNote = log.length
+      ? `<div class="chat-msg system chat-resume">นี่คือที่คุยค้างไว้ <button type="button" class="link-btn" data-act="new">เริ่มคุยเรื่องใหม่</button></div>`
+      : "";
+    list.innerHTML = (log.length ? resumeNote : welcomeHtml()) + log.map(msgHtml).join("");
     scrollDown();
   }
 
@@ -458,6 +474,7 @@
 
   async function startGuided(message) {
     guided = {};
+    if (list.querySelector(".welcome")) list.innerHTML = "";
     if (message) push({ role: "system", text: message });
     await guidedStep();
   }
@@ -491,8 +508,12 @@
     const idx = msgEl?.dataset.idx !== undefined ? Number(msgEl.dataset.idx) : -1;
     const m = log[idx];
 
-    if (act === "sample") {
-      send((config?.sample_questions || [])[Number(btn.dataset.i)]);
+    if (act === "new") {
+      reset();
+    } else if (act === "easy") {
+      startGuided();
+    } else if (act === "sample") {
+      send(usableSamples()[Number(btn.dataset.i)]);
     } else if (act === "suggest") {
       const s = m?.suggestions?.[Number(btn.dataset.i)];
       if (s === "เริ่มเลือกใหม่") return startGuided();
@@ -512,7 +533,7 @@
       try {
         await addToCart(Number(btn.dataset.id), 1);
         await renderCartBadge();
-        showToast("เพิ่มลงตะกร้าแล้ว ✓");
+        showAddedToCart();
       } catch (err) {
         showToast(err.message, "error");
       } finally {
@@ -544,7 +565,9 @@
   async function init(options = {}) {
     contextSkuId = options.contextSkuId || null;
     try {
-      config = await apiFetch(`/chat/config?device_id=${encodeURIComponent(deviceId())}`);
+      // บอก backend ว่าอยู่หน้าไหน จะได้เลือกคำถามตัวอย่างที่เหมาะ (หน้าแรกไม่มี "สองชิ้นนี้")
+      const context = contextSkuId ? "product" : /\/compare\.html$/.test(window.location.pathname) ? "compare" : "home";
+      config = await apiFetch(`/chat/config?device_id=${encodeURIComponent(deviceId())}&context=${context}`);
     } catch {
       config = null;
     }
