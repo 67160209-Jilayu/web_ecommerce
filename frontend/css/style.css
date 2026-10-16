@@ -3822,7 +3822,7 @@ summary:focus-visible,
 }
 
 .compare-slot-remove:hover { background: rgba(var(--sky-rgb), 0.22); }
-.compare-slot-remove-text { font-size: 0.72rem; }
+.compare-slot-remove-text { font-size: 0.75rem; }
 
 /* ---------- ของที่คล้ายกัน (กดเลือกเป็นชิ้นที่ 2 ได้เลย) ---------- */
 .compare-suggest {

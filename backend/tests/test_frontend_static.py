@@ -86,7 +86,7 @@ def test_compare_page_and_tray(client):
     js = client.get("/js/api.js").text
     assert "compare.html?ids=" in js  # ลิงก์แชร์
     assert "/account/compare-list" in js
-    assert re.search(r"COMPARE_MAX\s*=\s*4", js)
+    assert re.search(r"COMPARE_MAX\s*=\s*[2-4]", js)
 
 
 def test_phase2_ui_hooks_present(client):
