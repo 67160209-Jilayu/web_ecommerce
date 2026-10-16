@@ -24,7 +24,38 @@ services:
       # เอามาจากหน้า Dashboard ของ cloudinary.com (ดูขั้นตอนใน docs/deployment.md)
       # ถ้าไม่ตั้งค่านี้ ไฟล์จะเก็บลงดิสก์ของ container และหายทุกครั้งที่เซิร์ฟเวอร์รีสตาร์ต
       - key: CLOUDINARY_URL
-        sync: true
+        sync: false
+
+      # ---------- โมเดลภาษา (ไม่บังคับ) ----------
+      # ไม่ตั้ง GEMINI_API_KEY ก็ใช้งานได้ครบ: แชทเป็นโหมดปุ่มเลือก, สรุปเปรียบเทียบแบบกฎ, ไม่มีสรุปรีวิว/ค้นหาตามความหมาย
+      # key เป็นค่าลับ → กรอกเองในหน้า Environment ของ Render เท่านั้น (sync: false = ไม่ใส่ค่าในไฟล์นี้ ไม่ commit)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: auto            # auto = ใช้ gemini เมื่อมี GEMINI_API_KEY, ไม่มี = ไม่ใช้โมเดล
+      - key: LLM_MODEL
+        value: gemini-2.5-flash-lite   # เปลี่ยนได้ตอนรุ่นถูกปิด โดยไม่ต้องแก้โค้ด
+      # ---------- แชท: เปิดให้ผู้ใช้ 5% ก่อน แล้วค่อยขยาย ----------
+      # หลัง deploy ปรับได้โดยไม่ต้อง deploy ใหม่:  python -m app.settings set chat_rollout_percent 25
+      - key: CHAT_ROLLOUT_PERCENT
+        value: "5"
+      # ค้นหาตามความหมาย: รัน `python -m app.semantic` (สร้างเวกเตอร์ครั้งแรก) ก่อนเปลี่ยนเป็น true
+      - key: SEMANTIC_SEARCH
+        value: "false"
+
+# งานกลางคืน (ราคาก่อนลด + แจ้งเตือนในตะกร้า + ลบ log แชทเกิน 30 วัน) รันอัตโนมัติทุกครั้งที่แอป start อยู่แล้ว
+# ถ้าอยากให้รันตามเวลา (Render Cron Job ต้องใช้แผนเสียเงิน) ให้เพิ่ม service แบบนี้:
+#
+#  - type: cron
+#    name: shopmarket-nightly
+#    runtime: docker
+#    dockerfilePath: ./backend/Dockerfile
+#    dockerContext: .
+#    schedule: "0 19 * * *"          # 02:00 เวลาไทย (UTC+7)
+#    dockerCommand: python -m app.pricing
+#    envVars: (ใช้ DATABASE_URL เดียวกับเว็บ — ห้ามใส่ key ในไฟล์นี้)
+#
+# ข้อควรระวัง: free plan ของ Render ไม่มี persistent disk — ไฟล์ SQLite/uploads หายเมื่อรีสตาร์ต ใช้ PostgreSQL + Cloudinary ตามด้านบน
 
 databases:
   - name: shopmarket-db

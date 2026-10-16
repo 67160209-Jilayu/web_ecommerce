@@ -390,6 +390,7 @@ class CompareSummary(SQLModel, table=True):
     sku_set_hash: str = Field(primary_key=True)
     fingerprint: str
     summary: str
+    source: Optional[str] = None     # ai | rule (เฟส 4)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -461,3 +462,28 @@ EXTRA_INDEXES = [
 for _table, _name, _cols in EXTRA_INDEXES:
     _t = SQLModel.metadata.tables[_table]
     Index(_name, *[_t.c[c] for c in _cols])
+
+
+
+# ---------- เฟส 4 ----------
+
+class ReviewSummary(SQLModel, table=True):
+    """สรุป "ลูกค้าชม / ลูกค้าติ" ต่อสินค้า — สร้างใหม่เมื่อรีวิวเปลี่ยน (fingerprint ไม่ตรง)"""
+    __tablename__ = "review_summary"
+
+    product_id: int = Field(foreign_key="product.id", primary_key=True)
+    fingerprint: str
+    praise_json: str = "[]"          # [{"text","quote"}] ที่ผ่านการตรวจแล้ว
+    complaints_json: str = "[]"
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class ProductEmbedding(SQLModel, table=True):
+    """เวกเตอร์ความหมายของข้อความสินค้า (เฉพาะข้อมูลสินค้า ไม่มีข้อมูลผู้ใช้) — ค้นหาตามความหมาย"""
+    __tablename__ = "product_embedding"
+
+    product_id: int = Field(foreign_key="product.id", primary_key=True)
+    model: str
+    vector_json: str
+    text_hash: str
+    updated_at: datetime = Field(default_factory=utcnow)

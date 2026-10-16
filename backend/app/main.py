@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 
-from app import chat, config, llm, models, pricing, schemas, settings, specs, storage
+from app import chat, config, llm, models, pricing, schemas, semantic, settings, specs, storage
 from app.database import create_db_and_tables, engine, get_session
 from app.routers.auth import get_optional_user
 from app.routers import (
@@ -84,6 +84,7 @@ def features(
         llm_provider=provider,
         chat=chat.chat_enabled(session, current_user, device_id),
         chat_rollout_percent=settings.get(session, "chat_rollout_percent"),
+        semantic_search=semantic.enabled(session),
     )
 
 

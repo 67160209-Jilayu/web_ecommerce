@@ -23,11 +23,82 @@ docker compose up -d --build
 
 ปิดด้วย `docker compose down`
 
-> **ถ้าเจอ error `column ... does not exist`** แปลว่าโครงสร้างตารางใน DB เก่าไม่ตรงกับโค้ดปัจจุบัน
-> (โปรเจกต์ยังไม่มีระบบ migration) แก้ด้วย `docker compose down -v` แล้ว `docker compose up -d --build` ใหม่
+> **อัปเกรด DB เก่า:** ไม่ต้อง `docker compose down -v` อีกแล้ว — ตอน startup ระบบเติมคอลัมน์ใหม่ (`ALTER TABLE … ADD COLUMN IF NOT EXISTS`)
+> สร้างตาราง/ดัชนีใหม่ และเติมข้อมูลตั้งต้น (ประวัติราคา, `price_at_add`) ให้เอง ทำซ้ำได้ปลอดภัย
+> (ยังไม่มีระบบ migration เต็มรูปแบบ — การเปลี่ยนชนิด/ลบคอลัมน์ยังต้องทำเอง)
 
-> ต้องรันผ่าน Docker เท่านั้น รัน `uvicorn` ตรงๆ นอก container ไม่ได้ เพราะ path โฟลเดอร์ `frontend`
-> และ `uploads` อ้างอิงตาม `WORKDIR /app` ใน Dockerfile
+### รันในเครื่องโดยไม่ใช้ Docker (SQLite)
+
+ต้องมี Python 3.11+ (ทดสอบกับ 3.13) — ไม่ต้องมี PostgreSQL
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt     # (Linux/macOS: .venv/bin/python)
+$env:PYTHONUTF8 = "1"                                         # Windows: ข้อความตอน startup เป็นภาษาไทย
+$env:DATABASE_URL = "sqlite:///./shopmarket-dev.db"           # ไฟล์ DB อยู่ใน backend/ (ลบไฟล์ = รีเซ็ต)
+.venv\Scripts\python -m uvicorn app.main:app --port 8000
+```
+
+เปิด http://localhost:8000 · path ของ `frontend/` และ `uploads/` อ้างอิงจากตำแหน่งโค้ดแล้ว (ไม่ต้องรันจากโฟลเดอร์ใดโดยเฉพาะ)
+ข้อจำกัดของ SQLite: ไม่มี `SELECT … FOR UPDATE` จึงทดสอบการแย่งซื้อชิ้นสุดท้ายพร้อมกันไม่ได้ — ใช้ PostgreSQL ตอนใช้งานจริง
+
+### ตัวแปรสภาพแวดล้อม (Environment variables)
+
+ค่าลับ (key/password) ตั้งผ่าน environment เท่านั้น **ห้ามเขียนลงโค้ดหรือ commit**
+
+| ตัวแปร | ค่าเริ่มต้น | ใช้ทำอะไร |
+|---|---|---|
+| `DATABASE_URL` | `postgresql://appuser:apppassword@db:5432/appdb` | ฐานข้อมูล (`sqlite:///./x.db` สำหรับรันในเครื่อง) |
+| `APP_ENV` | `development` | `production` = ตรวจ `SECRET_KEY` เข้มงวด |
+| `SECRET_KEY` | ค่า dev | ลงนาม JWT — production ต้องสุ่มยาว ≥ 32 ตัวอักษร |
+| `CLOUDINARY_URL` | – | ที่เก็บรูป/วิดีโอบนคลาวด์ (ไม่ตั้ง = เก็บลงดิสก์ `UPLOAD_DIR`) |
+| `LLM_PROVIDER` | `auto` | `auto` (มี `GEMINI_API_KEY` → gemini, ไม่มี → ไม่ใช้โมเดล) · `gemini` · `fake` (ทดสอบ/เดโม ไม่ต่อเน็ต) · `none` |
+| `GEMINI_API_KEY` | – | key ของ Gemini (ค่าลับ — ตั้งใน environment ของเครื่อง/Render เท่านั้น) |
+| `LLM_MODEL` | `gemini-2.5-flash-lite` | ชื่อโมเดลแชท/สรุป (เปลี่ยนได้โดยไม่แก้โค้ด เพราะรุ่นถูกปิดบ่อย) |
+| `LLM_EMBED_MODEL` | `gemini-embedding-001` | โมเดลทำเวกเตอร์สำหรับค้นหาตามความหมาย |
+| `CHAT_ENABLED` / `CHAT_ROLLOUT_PERCENT` | `true` / `100` | สวิตช์แชท + % ผู้ใช้ที่เปิดให้ (ขึ้นจริงแนะนำเริ่ม 5) |
+| `SEMANTIC_SEARCH` | `false` | เปิดค้นหาตามความหมาย |
+| `PRICE_GRACE_ENABLED` / `PRICE_GRACE_START` / `PRICE_GRACE_DAYS` | `true` / `2026-10-03` / `30` | ช่วงผ่อนผันกฎราคาก่อนลด |
+| `PRICE_REF_MIN_DAYS` / `PRICE_RAISE_PERCENT` | `7` / `15` | เกณฑ์ราคาก่อนลด / ขึ้นราคาก่อนลดกี่ % ถึงซ่อน % ส่วนลด |
+| `CART_NOTICE_MIN_PERCENT` / `CART_NOTICE_MIN_BAHT` | `3` / `20` | เกณฑ์แจ้งราคาลดในตะกร้า (อย่างใดอย่างหนึ่ง) |
+| `REVIEW_SUMMARY_MIN_REVIEWS` | `3` | จำนวน **คนรีวิว** ขั้นต่ำก่อนแสดงสรุปรีวิว |
+| `FUZZY_MATCH_THRESHOLD` | `0.6` | เกณฑ์ "อาจเป็นรุ่นเดียวกัน" |
+
+ไม่มี `GEMINI_API_KEY` ก็ใช้งานได้ครบ: ฟีเจอร์ที่ใช้โมเดลจะถอยกลับอัตโนมัติ (สรุปเปรียบเทียบแบบกฎ, แชทเป็นโหมดปุ่มเลือก, ไม่มีสรุปรีวิว/ค้นหาตามความหมาย)
+
+### สวิตช์แชท / ค้นหาตามความหมาย (เปลี่ยนได้โดยไม่ต้อง deploy)
+
+```bash
+cd backend
+python -m app.settings get
+python -m app.settings set chat_enabled false          # ปิดแชททันที
+python -m app.settings set chat_rollout_percent 5      # เปิดให้ 5% ของผู้ใช้
+python -m app.settings set semantic_search true
+python -m app.settings unset chat_enabled              # กลับไปใช้ค่าจาก env
+```
+
+### งานตามเวลา (รันด้วย cron / Task Scheduler / Render Cron Job)
+
+ทุกงานรันซ้ำได้ปลอดภัย และ **รันอัตโนมัติตอน startup** ด้วยอยู่แล้ว (ยกเว้นข้อ 3–5):
+
+1. `python -m app.pricing` — กลางคืน (แนะนำ 02:00): เติมประวัติราคาที่ขาด, คำนวณราคาก่อนลดทุกสินค้า, ซิงก์แจ้งเตือนในตะกร้า, ลบ log แชทเกิน 30 วัน
+2. `python -m app.chat` — ลบ log/cache แชทที่หมดอายุ (อยู่ในข้อ 1 แล้ว)
+3. `python -m app.spec_suggest` — ให้โมเดลเสนอสเปกจากคำอธิบายสินค้า (ผู้ขายต้องกดยืนยันเอง ไม่บันทึกอัตโนมัติ)
+4. `python -m app.review_summary` — สร้าง/อัปเดตสรุปรีวิว
+5. `python -m app.semantic` — สร้างเวกเตอร์ค้นหาตามความหมายให้สินค้าทั้งหมด (ก่อนเปิด `SEMANTIC_SEARCH`)
+
+### รันชุดทดสอบ
+
+```powershell
+cd backend
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+.venv\Scripts\python -m pytest tests -q
+```
+
+ทดสอบบน SQLite ชั่วคราว ไม่ต่อเน็ต และบังคับ `LLM_PROVIDER=none` (เปิด `fake` เฉพาะเทสต์ที่ต้องการ) จึงไม่เรียก Gemini จริงแม้มี key ในเครื่อง ·
+ชุดทดสอบแชท 200 คำถาม (ปกติ 150 + โจมตี 50): `python -m tests.eval.run_eval [--adversarial]` ·
+กับโมเดลจริง: `python -m tests.eval.run_eval --real` (ทำงานเฉพาะเมื่อมี `GEMINI_API_KEY` ใน environment อยู่แล้ว)
 
 ### บัญชีตัวอย่างสำหรับทดลอง
 | อีเมล | รหัสผ่าน | ร้าน |
@@ -51,6 +122,30 @@ docker compose up -d --build
 - แดชบอร์ดดูสินค้าทั้งหมด รับคำสั่งซื้อ กดจัดส่ง ยกเลิก
 - ดูคะแนนรีวิวร้านที่คำนวณจากรีวิวจริง
 
+## ฟีเจอร์เพิ่มเติม (เฟส 1–4)
+
+**ราคาที่เชื่อถือได้**
+- ระบบจดประวัติราคา/สต็อกเบื้องหลังทุกครั้งที่เปลี่ยน (ไม่แสดงกราฟต่อผู้ซื้อ) ผู้ขายตั้งราคาขีดฆ่าเองไม่ได้ —
+  "ราคาก่อนลด" = ราคาต่ำสุดใน 30 วันก่อนเริ่มลด (ต้องมีราคาที่ใช้จริง ≥ 7 วัน) · ขึ้นราคา ≥ 15% ภายใน 14 วันก่อนลด → ซ่อน % ส่วนลด และบอกผู้ขายพร้อมเหตุผล
+  (ช่วง 30 วันแรกแค่เตือน) · แดชบอร์ดราคาสำหรับผู้ขาย: `GET /api/seller/price-status`
+- แจ้งเตือนราคาลดในตะกร้า (เฉพาะผู้ใช้ที่ล็อกอิน): แถบบนหน้าตะกร้า + จุดที่ไอคอนตะกร้า ไม่มี push/อีเมล/LINE
+
+**เปรียบเทียบสินค้า** — หน้า `pages/compare.html?ids=1,2,3` (แชร์ลิงก์ได้)
+- แม่แบบสเปกต่อหมวด (หน่วยล็อก เลือกจากตัวเลือก) · ป้าย "ข้อมูลครบ" · ระบบเสนอสเปกจากคำอธิบายให้ผู้ขายกดยืนยัน
+- ซ่อนสเปกที่เหมือนกัน · ค่าที่ดีกว่าไฮไลต์ · ค่าส่ง/ระยะเวลา/ราคารวมตามจังหวัดผู้ซื้อ · สรุป 1 บรรทัดที่ตัวเลขตรงกับตารางเสมอ
+- "ร้านอื่นที่ขายรุ่นนี้" (บาร์โค้ด/แบรนด์+รหัสรุ่นตรงกัน) แยกจาก "อาจเป็นรุ่นเดียวกัน" (จับคู่โดยประมาณ — ตัดรุ่นย่อยต่างกันและสินค้าเลียนแบบออก)
+- ผู้ขายตั้งค่าส่งของร้านได้ (เรทเดียว + เรทเฉพาะภาค + ส่งฟรีเมื่อครบ) — ใช้ตัวเดียวกันทั้งหน้าเทียบ ตะกร้า และ checkout
+
+**ผู้ช่วยช้อป (แชท)** — ตอบเฉพาะการหา/เทียบสินค้าจากข้อมูลจริงในระบบ
+- ไม่ต่อรองราคา ไม่สัญญา/รับประกันแทนร้าน ไม่บอกแนวโน้มราคา ราคาทุกตัวต้องตรงกับผลค้นจากฐานข้อมูล ไม่ผ่านการตรวจ → แสดงเฉพาะการ์ดสินค้า
+- จำกัดการใช้ + cache + log ที่ตัดข้อมูลส่วนตัว 30 วัน · ใช้โมเดลไม่ได้ → โหมดปุ่มเลือกทีละขั้น (หมวด → งบ → การใช้งาน)
+- เปิด/ปิดและค่อยๆ เปิดให้ผู้ใช้ได้โดยไม่ต้อง deploy (ดู "สวิตช์แชท")
+
+**เฟสต่อยอด**: สรุป "ลูกค้าชม/ลูกค้าติ" จากรีวิวจริง (แนบข้อความที่อ้างถึง ต้องมีผู้รีวิว ≥ 3 คน) · ค้นหาตามความหมาย
+("ของขวัญให้แม่") แบบผสมกับค้นหาด้วยคำ ปิดไว้เป็นค่าเริ่มต้น และถอยกลับเป็นค้นหาปกติเมื่อมีปัญหาเสมอ
+
+รายละเอียด API ทั้งหมด: [docs/api-spec.md](docs/api-spec.md)
+
 ## โครงสร้างโปรเจกต์
 ```
 backend/app/main.py                 จุดเริ่มแอป: API router + เชื่อม DB + serve uploads/frontend
@@ -61,6 +156,17 @@ backend/app/schemas.py              รูปแบบข้อมูลรั�
 backend/app/crud.py                 business logic ทั้งหมด (checkout, สิทธิ์, คำนวณ rating)
 backend/app/auth.py                 hash รหัสผ่าน (bcrypt) + ออก/ตรวจสอบ JWT
 backend/app/seed.py                 ข้อมูลตั้งต้น: หมวดหมู่ 6 หมวด + ร้าน mango (ไม่มีสินค้าตัวอย่าง)
+backend/app/pricing.py              ประวัติราคา, ราคาก่อนลดที่ระบบคำนวณ, กฎขึ้นราคาก่อนลด, แจ้งเตือนราคาลดในตะกร้า
+backend/app/specs.py                แม่แบบสเปกต่อหมวด + ตรวจค่าที่ผู้ขายกรอก
+backend/app/shipping.py             ค่าส่งต่อร้าน/ภาค, 77 จังหวัด, หาจังหวัดผู้ซื้อ
+backend/app/compare.py              ตารางเปรียบเทียบ, ป้าย, สรุป, ร้านอื่นที่ขายรุ่นนี้
+backend/app/matching.py             "อาจเป็นรุ่นเดียวกัน" (จับคู่โดยประมาณ)
+backend/app/llm.py                  ชั้นเรียกโมเดล (gemini / fake / none) + embed
+backend/app/chat.py, chat_guard.py  ผู้ช่วยช้อป + ด่านกรอง 4 ชั้น
+backend/app/review_summary.py       สรุปรีวิวจากรีวิวจริง
+backend/app/semantic.py             ค้นหาตามความหมาย (เวกเตอร์ใน DB)
+backend/app/spec_suggest.py         ระบบเสนอสเปกจากคำอธิบาย (batch)
+backend/app/settings.py             สวิตช์ที่เปลี่ยนได้โดยไม่ต้อง deploy (app_setting)
 backend/app/storage.py              จัดการไฟล์อัปโหลดบนดิสก์ (แปลง URL↔path, ลบไฟล์)
 backend/app/config.py               ค่าตั้งค่าจาก environment variable + ตรวจความปลอดภัยตอน startup
 backend/app/routers/

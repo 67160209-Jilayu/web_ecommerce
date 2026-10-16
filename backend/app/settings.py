@@ -17,6 +17,7 @@ from app import config, models
 KNOWN = {
     "chat_enabled": ("CHAT_ENABLED", "bool"),
     "chat_rollout_percent": ("CHAT_ROLLOUT_PERCENT", "int"),
+    "semantic_search": ("SEMANTIC_SEARCH", "bool"),
 }
 
 

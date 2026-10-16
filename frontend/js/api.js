@@ -501,6 +501,9 @@ const fetchProvinces = () => apiFetch("/shipping/provinces");
 const fetchAccountProvince = () => apiFetch("/account/province");
 const fetchSameModel = (id, province) =>
   apiFetch(`/products/${id}/same-model${province ? `?province=${encodeURIComponent(province)}` : ""}`);
+const fetchMaybeSame = (id, province) =>
+  apiFetch(`/products/${id}/maybe-same${province ? `?province=${encodeURIComponent(province)}` : ""}`);
+const fetchReviewSummary = (id) => apiFetch(`/products/${id}/review-summary`);
 const fetchSimilar = (id, limit = 3) => apiFetch(`/products/${id}/similar?limit=${limit}`);
 const fetchCompareList = () => apiFetch("/account/compare-list");
 const saveCompareList = (ids) =>

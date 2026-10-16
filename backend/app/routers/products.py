@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
-from app import compare, crud, models, schemas, spec_suggest
+from app import compare, crud, matching, models, review_summary, schemas, spec_suggest
 from app.database import get_session
 from app.routers.auth import get_current_user, get_optional_user
 from app.routers.shops import require_own_shop
@@ -192,3 +192,27 @@ def dismiss_spec_suggestions(
     """ปัดข้อเสนอที่ไม่ถูกต้องทิ้ง"""
     product = _load_own_product(product_id, session, current_user)
     crud.resolve_spec_suggestions(session, product, data.keys, confirm=False)
+
+
+
+# ---------------------------------------------------------------- เฟส 4
+
+@router.get("/{product_id}/maybe-same", response_model=list[schemas.MaybeSameRow])
+def maybe_same(
+    product_id: int,
+    province: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+):
+    """ร้านอื่นที่ "อาจเป็นรุ่นเดียวกัน" (จับคู่จากชื่อ+แบรนด์+สเปก) — แยกจากรายการที่ตรงทุกตัว [] = ไม่แสดง"""
+    product = _active_product(product_id, session)
+    if not province and current_user is not None:
+        province = crud.get_account_province(session, current_user).province
+    return matching.maybe_same(session, product, province)
+
+
+@router.get("/{product_id}/review-summary", response_model=schemas.ReviewSummaryRead)
+def get_review_summary(product_id: int, session: Session = Depends(get_session)):
+    """สรุป "ลูกค้าชม / ลูกค้าติ" จากรีวิวจริง (ต้องมีรีวิวถึงเกณฑ์) — ไม่มีก็คืน available=false"""
+    product = _active_product(product_id, session)
+    return review_summary.get_summary(session, product)
