@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css?v=20261009g" />
+  <link rel="stylesheet" href="../css/style.css?v=20261016a" />
 </head>
 <body>
   <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
@@ -34,8 +34,8 @@
     <div id="compare-body"><p class="state-message">กำลังโหลด...</p></div>
   </main>
 
-  <script src="../js/api.js?v=20261009g"></script>
-  <script src="../js/chat.js?v=20261009g"></script>
+  <script src="../js/api.js?v=20261016a"></script>
+  <script src="../js/chat.js?v=20261016a"></script>
   <script>
     document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -262,7 +262,12 @@
         .join("");
 
       body.innerHTML = `
-        ${data.summary ? `<p class="cmp-summary" role="status">💡 ${escapeHtml(data.summary)}</p>` : ""}
+        ${data.summary
+          ? `<p class="cmp-summary" role="status">💡 ${escapeHtml(data.summary)}
+               ${data.summary_source === "ai" || data.summary_source === "rule"
+                 ? `<span class="cmp-summary-src">สรุปให้อัตโนมัติจากตารางด้านล่าง</span>`
+                 : ""}</p>`
+          : ""}
         ${(data.missing_ids || []).length
           ? `<p class="alert alert-info">มีสินค้า ${data.missing_ids.length} ชิ้นที่ปิดขายหรือไม่พบแล้ว จึงไม่แสดงในตาราง</p>`
           : ""}

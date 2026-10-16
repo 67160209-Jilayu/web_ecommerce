@@ -38,6 +38,7 @@ ADDED_COLUMNS = [
     ("product", "barcode", "VARCHAR"),
     ("user", "province", "VARCHAR"),
     ("order", "province", "VARCHAR"),
+    ("compare_summary", "source", "VARCHAR"),       # เฟส 4
 ]
 
 

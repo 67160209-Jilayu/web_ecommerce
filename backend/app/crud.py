@@ -11,7 +11,7 @@ from typing import List, Optional
 from sqlalchemy.orm import object_session, selectinload
 from sqlmodel import Session, select
 
-from app import models, pricing, schemas, shipping, specs
+from app import models, pricing, schemas, semantic, shipping, specs
 from app.auth import hash_password, verify_password
 from app.models import OrderStatus, PaymentMethod, PriceSource
 from app.storage import delete_files
@@ -216,6 +216,7 @@ def list_products(
         stmt = stmt.order_by(models.Product.id.desc())
 
     products = session.exec(stmt).all()
+    filtered = list(products)   # ผ่านตัวกรองหมวด/ราคา/ร้านแล้ว (ใช้เป็นขอบเขตของการค้นตามความหมาย)
 
     # ค้นหาด้วยคำ ทำในหน่วยความจำเพื่อให้รองรับภาษาไทยแบบไม่สนตัวพิมพ์เล็ก-ใหญ่
     if search:
@@ -232,6 +233,9 @@ def list_products(
     specs.prefetch_values(session, ids)
 
     reads = [_to_product_read(p) for p in products]
+    if search:
+        for r in reads:
+            r.match = "keyword"
     if sort not in ("price_asc", "price_desc", "popular", "rating"):
         # เฟส 2: สินค้าที่กรอกสเปกครบได้อันดับดีขึ้นเล็กน้อย (ขยับขึ้น SPEC_BOOST_POSITIONS ตำแหน่ง)
         # เฉพาะการเรียงค่าเริ่มต้น — ถ้าผู้ใช้เลือกเรียงตามราคา/ยอดขาย/คะแนนเอง ไม่ยุ่ง
@@ -241,6 +245,14 @@ def list_products(
                 key=lambda ir: (ir[0] - (SPEC_BOOST_POSITIONS + 0.5 if ir[1].spec_complete else 0), ir[0]),
             )
         ]
+    if search:
+        # เฟส 4: ต่อท้ายด้วยสินค้าที่ความหมายใกล้คำค้น (ผลค้นด้วยคำยังอยู่ครบและลำดับเดิม)
+        # ปิดสวิตช์/ไม่มีผู้ให้บริการ/ผิดพลาด → semantic_ids คืน [] = ผลค้นหาเดิม
+        by_id = {p.id: p for p in filtered}
+        for pid in semantic.semantic_ids(session, search, filtered, exclude={p.id for p in products}):
+            r = _to_product_read(by_id[pid])
+            r.match = "semantic"
+            reads.append(r)
     return reads
 
 
@@ -342,6 +354,7 @@ def create_product(
     pricing.record_price_state(session, product, PriceSource.SELLER)
     session.commit()
     pricing.after_price_change(session, [product.id])
+    semantic.after_product_change(session, product.id)
     session.refresh(product)
     return _to_product_read(product)
 
@@ -396,6 +409,7 @@ def update_product(
     session.commit()
     if changed is not None:
         pricing.after_price_change(session, [product.id])
+    semantic.after_product_change(session, product.id)   # embed ใหม่เฉพาะเมื่อข้อความสินค้าเปลี่ยน
     session.refresh(product)
     return _to_product_read(product)
 

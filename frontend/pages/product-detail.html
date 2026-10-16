@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css?v=20261009g" />
+  <link rel="stylesheet" href="../css/style.css?v=20261016a" />
 </head>
 <body>
   <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
@@ -35,11 +35,13 @@
     </div>
     <div id="specs-content"></div>
     <div id="same-model-content"></div>
+    <div id="review-summary-content"></div>
     <div id="review-content"></div>
+    <div id="maybe-same-content"></div>
   </main>
 
-  <script src="../js/api.js?v=20261009g"></script>
-  <script src="../js/chat.js?v=20261009g"></script>
+  <script src="../js/api.js?v=20261016a"></script>
+  <script src="../js/chat.js?v=20261016a"></script>
   <script>
     document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -194,7 +196,8 @@
 
       document.getElementById("compare-similar-btn").addEventListener("click", compareSimilar);
       renderSpecs(product);
-      loadSameModel(product);
+      loadSameModel(product).then(() => loadMaybeSame(product));
+      loadReviewSummary(product);
       loadReviews(id, product);
     }
 
@@ -345,6 +348,121 @@
             </table>
           </div>
         </div>`;
+    }
+
+    /**
+     * "อาจเป็นรุ่นเดียวกัน" — ระบบเดาจากชื่อ แบรนด์ และสเปกที่คล้ายกัน (ไม่ใช่รหัสรุ่นตรงกัน)
+     * แยกส่วนชัดเจนจาก "ร้านอื่นที่ขายรุ่นนี้" และบอกว่าเป็นการคาดคะเน ให้ผู้ซื้อตรวจเองก่อนซื้อ
+     */
+    async function loadMaybeSame(product) {
+      const box = document.getElementById("maybe-same-content");
+      const province = await getBuyerProvince();
+      let list = [];
+      try {
+        const res = await fetchMaybeSame(product.id, province);
+        list = Array.isArray(res) ? res : res?.items || [];
+      } catch {
+        return;
+      }
+      if (!list.length) {
+        box.innerHTML = "";
+        return;
+      }
+      const fee = (o) =>
+        o.shipping_fee == null ? "" : shippingFeeText({ fee: o.shipping_fee, free_reason: o.free_reason, free_over: o.free_over });
+      box.innerHTML = `
+        <section class="review-section maybe-same" aria-labelledby="maybe-same-title">
+          <h2 class="panel-title" id="maybe-same-title">อาจเป็นรุ่นเดียวกัน <span class="maybe-tag">คาดคะเน</span></h2>
+          <p class="maybe-note">
+            ระบบเดาจากชื่อ แบรนด์ และสเปกที่คล้ายกัน <b>ไม่ใช่รหัสรุ่นตรงกัน</b> —
+            โปรดตรวจรายละเอียดในหน้าสินค้าก่อนซื้อ</p>
+          <ul class="maybe-list">
+            ${list
+              .map(
+                (o) => `
+              <li class="maybe-item">
+                <div class="maybe-main">
+                  <a href="product-detail.html?id=${o.product_id}" class="maybe-name">${escapeHtml(o.name || `ดูสินค้าของร้าน ${o.shop_name || ""}`)}</a>
+                  <div class="order-line-meta">ร้าน ${escapeHtml(o.shop_name || "")}${o.shop_rating ? ` · ⭐ ${o.shop_rating}` : ""}</div>
+                  ${(o.reasons || []).length
+                    ? `<div class="maybe-reasons">${o.reasons.map((r) => `<span class="pill-muted">${escapeHtml(r.replace(/^สเปกตรงกัน/, "สเปกหลักตรงกัน"))}</span>`).join("")}</div>
+                    <div class="order-line-meta">กด "+ เทียบ" เพื่อดูตารางเปรียบเทียบสเปกจริง</div>`
+                    : ""}
+                </div>
+                <div class="maybe-price">
+                  <div class="maybe-total">${formatBaht(o.total ?? o.price)}</div>
+                  <div class="order-line-meta">${o.total == null ? "ราคาสินค้า" : province ? `รวมค่าส่งไป${escapeHtml(province)}` : "รวมค่าส่งแบบมาตรฐาน"}
+                    ${o.total != null && fee(o) ? `<br />ค่าส่ง ${fee(o)}` : ""}</div>
+                </div>
+                <div class="maybe-actions">
+                  ${compareButtonHtml({ id: o.product_id, name: o.name || "", image: o.image, cover_url: o.cover_url, category_id: product.category_id })}
+                </div>
+              </li>`
+              )
+              .join("")}
+          </ul>
+        </section>`;
+    }
+
+    /**
+     * "สรุปจากรีวิวลูกค้า" — แสดงเมื่อ backend บอกว่าพร้อม (available) เท่านั้น
+     * ทุกข้อมาพร้อมข้อความจริงจากรีวิว (quote) ให้ผู้ซื้อกดดูได้ว่ามาจากรีวิวไหน
+     * ครั้งแรกหลังมีรีวิวใหม่อาจใช้เวลาหลายวินาที → แสดงสถานะกำลังสรุป (เฉพาะเมื่อมีรีวิวพอ)
+     */
+    async function loadReviewSummary(product) {
+      const box = document.getElementById("review-summary-content");
+      if ((product.review_count || 0) >= 3) {
+        box.innerHTML = `<section class="review-section review-summary" aria-busy="true">
+          <p class="state-message loading">กำลังสรุปจากรีวิวลูกค้า...</p></section>`;
+      }
+      let data;
+      try {
+        data = await fetchReviewSummary(product.id);
+      } catch {
+        box.innerHTML = "";
+        return;
+      }
+      // รับได้ทั้ง [str] + *_quotes คู่ขนาน (v1.1) และ [{text, quote}] (v1)
+      const norm = (items, quotes) =>
+        (items || [])
+          .map((p, i) => (typeof p === "string" ? { text: p, quote: (quotes || [])[i] || "" } : p))
+          .filter((p) => p && p.text);
+      const praise = norm(data?.praise, data?.praise_quotes);
+      const complaints = norm(data?.complaints, data?.complaint_quotes);
+      if (!data?.available || (!praise.length && !complaints.length)) {
+        box.innerHTML = "";
+        return;
+      }
+      const n = data.review_count ?? product.review_count;
+      const label = data.label || `สรุปจากรีวิว ${Number(n || 0).toLocaleString("th-TH")} รายการ`;
+      const listHtml = (items, cls) => `
+        <ul class="rs-list ${cls}">
+          ${items
+            .map(
+              (p) => `<li>${escapeHtml(p.text)}
+                ${p.quote && p.quote.trim() !== p.text.trim()
+                  ? `<details class="rs-quote"><summary>ดูจากรีวิว</summary>
+                       <blockquote>“${escapeHtml(p.quote)}”</blockquote></details>`
+                  : ""}</li>`
+            )
+            .join("")}
+        </ul>`;
+      box.innerHTML = `
+        <section class="review-section review-summary" aria-labelledby="rs-title">
+          <h2 class="panel-title" id="rs-title">${escapeHtml(label)}</h2>
+          ${product.review_count > 0
+            ? `<p class="rs-avg"><span class="review-stars" aria-hidden="true">★</span> คะแนนเฉลี่ย ${product.rating} จาก ${product.review_count} รีวิว</p>`
+            : ""}
+          <div class="rs-cols">
+            ${praise.length
+              ? `<div class="rs-col"><h3 class="rs-head good"><span aria-hidden="true">👍</span> ลูกค้าชม</h3>${listHtml(praise, "good")}</div>`
+              : ""}
+            ${complaints.length
+              ? `<div class="rs-col"><h3 class="rs-head bad"><span aria-hidden="true">👎</span> ลูกค้าติ</h3>${listHtml(complaints, "bad")}</div>`
+              : ""}
+          </div>
+          <p class="rs-note">สรุปให้อัตโนมัติจากรีวิวของผู้ซื้อที่ได้รับสินค้าแล้วเท่านั้น อ่านรีวิวเต็มได้ด้านล่าง</p>
+        </section>`;
     }
 
     async function loadReviews(productId, product) {
