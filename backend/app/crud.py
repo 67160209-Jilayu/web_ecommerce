@@ -11,7 +11,7 @@ from typing import List, Optional
 from sqlalchemy.orm import object_session, selectinload
 from sqlmodel import Session, select
 
-from app import models, pricing, schemas, semantic, shipping, specs
+from app import config, models, pricing, schemas, semantic, shipping, specs, synonyms
 from app.auth import hash_password, verify_password
 from app.models import OrderStatus, PaymentMethod, PriceSource
 from app.storage import delete_files
@@ -173,6 +173,12 @@ def _clean_code(value: Optional[str]) -> Optional[str]:
     return value[:100] or None
 
 
+def _search_text(session: Session, p: models.Product) -> str:
+    """ข้อความที่ใช้ค้นแบบคำพ้อง: ชื่อ + คำอธิบาย + แบรนด์ + ค่าสเปกที่เป็นข้อความ (ตัวพิมพ์เล็ก)"""
+    vals = " ".join(v.value_text or "" for v in specs.values_of(session, p.id).values())
+    return f"{p.name} {p.description or ''} {p.brand or ''} {vals}".casefold()
+
+
 def list_products(
     session: Session,
     search: Optional[str] = None,
@@ -245,11 +251,26 @@ def list_products(
                 key=lambda ir: (ir[0] - (SPEC_BOOST_POSITIONS + 0.5 if ir[1].spec_complete else 0), ir[0]),
             )
         ]
+    if search and config.SYNONYM_FALLBACK and len(reads) < config.SYNONYM_MIN_RESULTS:
+        # ค้นด้วยคำปกติได้ผลน้อย → ขยายด้วยแผนที่คำพ้อง (ไม่ใช้โมเดล) ต่อท้ายผลเดิม ติดป้าย match="synonym"
+        # ไม่แตะลำดับของผลค้นด้วยคำ
+        terms = synonyms.expand(search)
+        if terms:
+            seen = {r.id for r in reads}
+            for p in filtered:
+                if p.id in seen:
+                    continue
+                hay = _search_text(session, p)
+                if any(t.casefold() in hay for t in terms):
+                    r = _to_product_read(p)
+                    r.match = "synonym"
+                    reads.append(r)
+                    seen.add(p.id)
     if search:
         # เฟส 4: ต่อท้ายด้วยสินค้าที่ความหมายใกล้คำค้น (ผลค้นด้วยคำยังอยู่ครบและลำดับเดิม)
         # ปิดสวิตช์/ไม่มีผู้ให้บริการ/ผิดพลาด → semantic_ids คืน [] = ผลค้นหาเดิม
         by_id = {p.id: p for p in filtered}
-        for pid in semantic.semantic_ids(session, search, filtered, exclude={p.id for p in products}):
+        for pid in semantic.semantic_ids(session, search, filtered, exclude={r.id for r in reads}):
             r = _to_product_read(by_id[pid])
             r.match = "semantic"
             reads.append(r)
