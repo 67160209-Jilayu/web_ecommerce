@@ -64,6 +64,7 @@ $env:DATABASE_URL = "sqlite:///./shopmarket-dev.db"           # ไฟล์ DB 
 | `CART_NOTICE_MIN_PERCENT` / `CART_NOTICE_MIN_BAHT` | `3` / `20` | เกณฑ์แจ้งราคาลดในตะกร้า (อย่างใดอย่างหนึ่ง) |
 | `REVIEW_SUMMARY_MIN_REVIEWS` | `3` | จำนวน **คนรีวิว** ขั้นต่ำก่อนแสดงสรุปรีวิว |
 | `FUZZY_MATCH_THRESHOLD` | `0.6` | เกณฑ์ "อาจเป็นรุ่นเดียวกัน" |
+| `SYNONYM_FALLBACK` / `SYNONYM_MIN_RESULTS` | `true` / `3` | ค้นหาประโยคธรรมชาติด้วยแผนที่คำพ้อง (แก้คำได้ใน `backend/app/synonyms.py`) เมื่อค้นด้วยคำได้ผลน้อย |
 
 ไม่มี `GEMINI_API_KEY` ก็ใช้งานได้ครบ: ฟีเจอร์ที่ใช้โมเดลจะถอยกลับอัตโนมัติ (สรุปเปรียบเทียบแบบกฎ, แชทเป็นโหมดปุ่มเลือก, ไม่มีสรุปรีวิว/ค้นหาตามความหมาย)
 

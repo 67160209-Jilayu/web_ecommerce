@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="../css/style.css?v=20261016a" />
+  <link rel="stylesheet" href="../css/style.css?v=20261016b" />
 </head>
 <body>
   <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
@@ -40,8 +40,8 @@
     <div id="maybe-same-content"></div>
   </main>
 
-  <script src="../js/api.js?v=20261016a"></script>
-  <script src="../js/chat.js?v=20261016a"></script>
+  <script src="../js/api.js?v=20261016b"></script>
+  <script src="../js/chat.js?v=20261016b"></script>
   <script>
     document.getElementById("search-form").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -383,6 +383,7 @@
                   <div class="order-line-meta">ร้าน ${escapeHtml(o.shop_name || "")}${o.shop_rating ? ` · ⭐ ${o.shop_rating}` : ""}</div>
                   ${(o.reasons || []).length
                     ? `<div class="maybe-reasons">${o.reasons.map((r) => `<span class="pill-muted">${escapeHtml(r.replace(/^สเปกตรงกัน/, "สเปกหลักตรงกัน"))}</span>`).join("")}</div>
+                    <div class="order-line-meta">กด "+ เทียบ" เพื่อดูตารางเปรียบเทียบสเปกจริง</div>
                     <div class="order-line-meta">กด "+ เทียบ" เพื่อดูตารางเปรียบเทียบสเปกจริง</div>`
                     : ""}
                 </div>
@@ -431,7 +432,10 @@
         return;
       }
       const n = data.review_count ?? product.review_count;
-      const label = data.label || `สรุปจากรีวิว ${Number(n || 0).toLocaleString("th-TH")} รายการ`;
+      // ถ้า backend ส่งจำนวนผู้รีวิวจริง (reviewer_count) ใช้ "จากรีวิวของลูกค้า N คน" ไม่งั้นใช้ label เดิม
+      const label = data.reviewer_count
+        ? `สรุปจากรีวิวของลูกค้า ${Number(data.reviewer_count).toLocaleString("th-TH")} คน`
+        : data.label || `สรุปจากรีวิว ${Number(n || 0).toLocaleString("th-TH")} รายการ`;
       const listHtml = (items, cls) => `
         <ul class="rs-list ${cls}">
           ${items
