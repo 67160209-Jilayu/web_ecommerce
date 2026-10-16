@@ -245,11 +245,14 @@ SSE event ตามลำดับ: `meta {session_id,message_id,intent,mode}` �
 
 | Method | Path | คำอธิบาย |
 |---|---|---|
-| GET | `/products/{id}/review-summary` | `{available, review_count, min_reviews, label, praise[], complaints[], praise_quotes[], complaint_quotes[], source, generated_at}` — ตอบ 200 เสมอ (`available=false` เมื่อผู้รีวิวไม่ถึง 3 คน/ไม่มีโมเดล) |
+| GET | `/products/{id}/review-summary` | `{available, review_count, reviewer_count, min_reviews, label, praise[], complaints[], praise_quotes[], complaint_quotes[], source, generated_at}` — ตอบ 200 เสมอ (`available=false` เมื่อผู้รีวิวไม่ถึง 3 คน/ไม่มีโมเดล) · `label` = "สรุปจากรีวิวของลูกค้า N คน" (N = `reviewer_count`) |
 | GET | `/products/{id}/maybe-same?province=` | ร้านอื่นที่ **อาจเป็น** รุ่นเดียวกัน: `{product_id,name,image,shop_*,price,shipping_fee,total,...,score,reasons[],label}` — แยกจาก `/same-model` เสมอ |
 
 - สรุปรีวิว: ทุกข้อแนบ `quote` ที่เป็นข้อความจริงจากรีวิว คำคุณสมบัติ (เช่น กันน้ำ) ต้องมีในรีวิวจริง ไม่ผ่านถูกทิ้ง · cache และสร้างใหม่เมื่อรีวิวเปลี่ยน
 - maybe-same: คะแนน = ชื่อ (น้ำหนักจำกัด 0.4) + แบรนด์ + สเปกที่ตรงกัน เกณฑ์ 0.6 · ตัดทิ้งเมื่อ แบรนด์/บาร์โค้ด/รหัสรุ่นต่างกัน, คำบอกรุ่นต่างกัน (Pro/Max/Mini/… หรือเลขรุ่น),
   สเปกตัวเลขต่างกัน > 10%, หรือมีคำที่หมายถึงของเลียนแบบ (เกรดเอ/ก๊อป/เทียบแท้/…) — ใช้กฎเดียวกันกับ `/same-model`
 - ค้นหาตามความหมาย: เปิดด้วย `SEMANTIC_SEARCH=true` · `GET /products?search=` ได้ผลค้นด้วยคำเหมือนเดิมก่อน แล้วต่อด้วยสินค้าที่ความหมายใกล้เคียง
-  (แต่ละรายการมี `match`: `keyword` / `semantic`) · ปิด/ไม่มีโมเดล/ผิดพลาด → ผลค้นหาเดิมเท่านั้น
+  (แต่ละรายการมี `match`: `keyword` / `synonym` / `semantic`) · ปิด/ไม่มีโมเดล/ผิดพลาด → ผลค้นหาเดิมเท่านั้น
+
+- ค้นหาด้วยคำพ้อง (ไม่ใช้โมเดล): ถ้าค้นด้วยคำปกติได้ < 3 รายการ ระบบขยายคำค้นจากแผนที่ `app/synonyms.py` (เช่น "หน้าฝน" → ร่ม/เสื้อกันฝน/กันน้ำ)
+  และต่อท้ายผลเดิมด้วยรายการที่ติดป้าย `match: "synonym"` — ลำดับผลค้นด้วยคำไม่เปลี่ยน · ปิดได้ด้วย `SYNONYM_FALLBACK=false`

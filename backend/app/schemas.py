@@ -175,7 +175,7 @@ class ProductRead(SQLModel):
     barcode: Optional[str] = None
     attributes: list[AttributeValueRead] = []
     spec_complete: bool = False   # กรอกสเปกที่จำเป็นครบ → ป้าย "ข้อมูลครบ"
-    match: Optional[str] = None   # เฉพาะผลค้นหา: keyword | semantic (เฟส 4)
+    match: Optional[str] = None   # เฉพาะผลค้นหา: keyword | synonym | semantic
 
 
 # ---------- Cart ----------
@@ -559,6 +559,7 @@ class MaybeSameRow(SQLModel):
 class ReviewSummaryRead(SQLModel):
     available: bool
     review_count: int
+    reviewer_count: int = 0      # จำนวนคนรีวิว (ไม่ซ้ำ) — ตัวเลขที่ใช้กับเกณฑ์ขั้นต่ำและป้ายหัวข้อ
     min_reviews: int
     label: Optional[str] = None
     praise: list[str] = []

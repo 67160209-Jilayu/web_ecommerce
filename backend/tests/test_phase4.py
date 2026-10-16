@@ -215,7 +215,8 @@ def test_review_summary_shape_and_ai(client, reviewed_product, fake, monkeypatch
                       "praise_quotes", "complaint_quotes", "source", "generated_at"}
     assert b["available"] is True and b["source"] == "ai" and b["generated_at"]
     assert b["review_count"] == 3 and b["min_reviews"] == 3
-    assert b["label"] == "สรุปจากรีวิว 3 รายการ" and "AI" not in b["label"]
+    assert b["reviewer_count"] == 3
+    assert b["label"] == "สรุปจากรีวิวของลูกค้า 3 คน" and "AI" not in b["label"]
     assert b["praise"] == ["เสียงดี", "ใส่สบาย"] and b["complaints"] == ["สายสั้น"]
     assert len(b["praise_quotes"]) == 2 and len(b["complaint_quotes"]) == 1
     comments = " ".join(c for _, c in GOOD_REVIEWS[:3])
@@ -274,7 +275,7 @@ def test_review_summary_regenerated_when_reviews_change(client, api, reviewed_pr
     calls = spy(monkeypatch, TASK_REVIEW, model_json(praise=[("แบตอึด", "แบตอึดดี")], complaints=[("กล่องบุบ", "กล่องบุบ")]))
     b = rs(client, p["id"])
     assert calls, "รีวิวเปลี่ยนแล้วต้องสร้างสรุปใหม่"
-    assert b["review_count"] == 4 and b["label"] == "สรุปจากรีวิว 4 รายการ"
+    assert b["review_count"] == 4 and b["reviewer_count"] == 4 and b["label"] == "สรุปจากรีวิวของลูกค้า 4 คน"
     assert b["complaints"] == ["กล่องบุบ"]
 
 
@@ -629,3 +630,36 @@ def test_review_summary_counts_distinct_reviewers(client, api, fake, monkeypatch
     add_review(api, client, hs, p["id"], *GOOD_REVIEWS[3])
     add_review(api, client, hs, p["id"], 5, "ใส่สบาย เสียงชัด")
     assert rs(client, p["id"])["available"] is True  # 3 คนไม่ซ้ำ → ครบเกณฑ์
+
+
+def test_reviewer_count_counts_distinct_people(client, api, fake, monkeypatch):
+    """4 รีวิวจาก 2 คน → review_count=4 แต่ reviewer_count=2 → ยังไม่ครบ 3 คน ไม่สรุป และป้ายต้องใช้จำนวนคน"""
+    hs, _ = api.seller()
+    p = api.product(hs, price=500, stock=50)
+    calls = spy(monkeypatch, TASK_REVIEW, VALID)
+    buyers = [api.user(), api.user()]
+    for i in range(4):
+        buyer = buyers[i % 2]
+        token = api.user_cart(buyer)
+        api.add_to_cart(token, p["id"], h=buyer)
+        order = client.post(f"/api/orders/checkout?token={token}", json=CHECKOUT, headers=buyer).json()[0]
+        client.post(f"/api/orders/{order['id']}/ship", headers=hs)
+        client.post(f"/api/orders/{order['id']}/receive", headers=buyer)
+        r = client.post("/api/reviews", json={"order_item_id": order["items"][0]["id"], "rating": 5,
+                                              "comment": GOOD_REVIEWS[i][1]}, headers=buyer)
+        assert r.status_code == 201, r.text
+    b = rs(client, p["id"])
+    assert b["review_count"] == 4 and b["reviewer_count"] == 2
+    assert b["available"] is False and b["label"] is None and calls == []
+    # คนที่ 3 รีวิว → ครบเกณฑ์ ป้ายใช้จำนวนคน (3) ไม่ใช่จำนวนรีวิว (5)
+    add_review(api, client, hs, p["id"], 5, "ใส่สบาย เสียงชัด")
+    b = rs(client, p["id"])
+    assert b["available"] is True and b["review_count"] == 5 and b["reviewer_count"] == 3
+    assert b["label"] == "สรุปจากรีวิวของลูกค้า 3 คน"
+
+
+def test_reviewer_count_present_when_unavailable(client, api, fake, monkeypatch):
+    hs, _ = api.seller()
+    p = api.product(hs, price=500, stock=5)
+    b = rs(client, p["id"])
+    assert b["review_count"] == 0 and b["reviewer_count"] == 0 and b["available"] is False

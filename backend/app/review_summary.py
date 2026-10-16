@@ -106,8 +106,9 @@ def _fingerprint(reviews: List[models.Review], provider: str) -> str:
     return f"{len(reviews)}:{reviews[-1].id if reviews else 0}:{provider}"
 
 
-def _empty(count: int) -> dict:
-    return dict(available=False, review_count=count, min_reviews=config.REVIEW_SUMMARY_MIN_REVIEWS,
+def _empty(count: int, reviewers: int = 0) -> dict:
+    return dict(available=False, review_count=count, reviewer_count=reviewers,
+                min_reviews=config.REVIEW_SUMMARY_MIN_REVIEWS,
                 label=None, praise=[], complaints=[], praise_quotes=[], complaint_quotes=[],
                 summary=None, source=None, generated_at=None)
 
@@ -142,7 +143,7 @@ def get_summary(session: Session, product: models.Product) -> dict:
     # นับ "จำนวนคนรีวิว" ไม่ใช่จำนวนรีวิว — คนเดียวสั่งหลายออเดอร์แล้วรีวิวหลายครั้งไม่ปลดล็อกสรุป
     reviewers = len({r.user_id for r in reviews})
     if reviewers < config.REVIEW_SUMMARY_MIN_REVIEWS or adapter is None:
-        return _empty(count)
+        return _empty(count, reviewers)
     row = session.get(models.ReviewSummary, product.id)
     if row is None or row.fingerprint != _fingerprint(reviews, adapter.name):
         try:
@@ -150,14 +151,15 @@ def get_summary(session: Session, product: models.Product) -> dict:
             session.commit()
         except llm.LlmUnavailable:
             session.rollback()
-            return _empty(count)
+            return _empty(count, reviewers)
     praise, complaints = json.loads(row.praise_json), json.loads(row.complaints_json)
     if not praise and not complaints:
-        return _empty(count)
+        return _empty(count, reviewers)
     gen = row.created_at
     return dict(
-        available=True, review_count=count, min_reviews=config.REVIEW_SUMMARY_MIN_REVIEWS,
-        label=f"สรุปจากรีวิว {count} รายการ",
+        available=True, review_count=count, reviewer_count=reviewers,
+        min_reviews=config.REVIEW_SUMMARY_MIN_REVIEWS,
+        label=f"สรุปจากรีวิวของลูกค้า {reviewers} คน",
         praise=[p["text"] for p in praise], complaints=[p["text"] for p in complaints],
         praise_quotes=[p["quote"] for p in praise], complaint_quotes=[p["quote"] for p in complaints],
         summary=None, source="ai",
