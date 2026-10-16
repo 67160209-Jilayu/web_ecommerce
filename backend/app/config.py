@@ -158,6 +158,21 @@ CHAT_CACHE_HOURS = float(os.getenv("CHAT_CACHE_HOURS", "6"))
 CHAT_LOG_DAYS = int(os.getenv("CHAT_LOG_DAYS", "30"))
 
 
+# ---------- เฟส 4: สรุปด้วยโมเดล / จับคู่ "อาจเป็นรุ่นเดียวกัน" / ค้นหาตามความหมาย
+REVIEW_SUMMARY_MIN_REVIEWS = int(os.getenv("REVIEW_SUMMARY_MIN_REVIEWS", "3"))
+FUZZY_MATCH_THRESHOLD = float(os.getenv("FUZZY_MATCH_THRESHOLD", "0.6"))
+FUZZY_MAX_RESULTS = int(os.getenv("FUZZY_MAX_RESULTS", "3"))
+FUZZY_NAME_WEIGHT = float(os.getenv("FUZZY_NAME_WEIGHT", "0.4"))   # ต้องน้อยกว่า threshold เสมอ (กันยัดชื่อ)
+FUZZY_BRAND_WEIGHT = float(os.getenv("FUZZY_BRAND_WEIGHT", "0.25"))
+FUZZY_SPEC_WEIGHT = float(os.getenv("FUZZY_SPEC_WEIGHT", "0.35"))
+SYNONYM_FALLBACK = _env_bool("SYNONYM_FALLBACK", True)              # ขยายคำค้นด้วยแผนที่คำพ้อง (app/synonyms.py)
+SYNONYM_MIN_RESULTS = int(os.getenv("SYNONYM_MIN_RESULTS", "3"))   # ค้นด้วยคำได้น้อยกว่านี้ถึงขยาย
+SEMANTIC_SEARCH = _env_bool("SEMANTIC_SEARCH", False)               # app_setting "semantic_search" ทับได้
+SEMANTIC_MIN_SCORE = float(os.getenv("SEMANTIC_MIN_SCORE", "0.55"))
+SEMANTIC_MAX_RESULTS = int(os.getenv("SEMANTIC_MAX_RESULTS", "10"))
+LLM_EMBED_MODEL = os.getenv("LLM_EMBED_MODEL", "gemini-embedding-001")
+
+
 def validate() -> None:
     """ตรวจค่าที่ห้ามพลาดก่อนแอปเริ่มรับ request — เรียกตอน startup
 

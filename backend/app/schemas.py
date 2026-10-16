@@ -175,6 +175,7 @@ class ProductRead(SQLModel):
     barcode: Optional[str] = None
     attributes: list[AttributeValueRead] = []
     spec_complete: bool = False   # กรอกสเปกที่จำเป็นครบ → ป้าย "ข้อมูลครบ"
+    match: Optional[str] = None   # เฉพาะผลค้นหา: keyword | synonym | semantic
 
 
 # ---------- Cart ----------
@@ -498,6 +499,7 @@ class CompareResult(SQLModel):
     region: Optional[str] = None
     same_category: bool
     summary: Optional[str] = None
+    summary_source: Optional[str] = None   # ai | rule | fixed
     missing_ids: list[int] = []
     items: list[CompareItem]
     groups: list[CompareGroup]
@@ -528,6 +530,50 @@ class Features(SQLModel):
     llm_provider: str           # gemini | fake | none
     chat: bool = False
     chat_rollout_percent: int = 0
+    semantic_search: bool = False
+
+
+
+# ---------- เฟส 4 ----------
+
+class MaybeSameRow(SQLModel):
+    product_id: int
+    name: str
+    image: str
+    cover_url: Optional[str] = None
+    shop_id: Optional[int] = None
+    shop_name: str
+    shop_rating: float
+    price: int
+    shipping_fee: int
+    total: int
+    days_min: int
+    days_max: int
+    free_reason: Optional[str] = None
+    free_over: Optional[int] = None
+    score: float
+    reasons: list[str] = []
+    label: str
+
+
+class ReviewSummaryRead(SQLModel):
+    available: bool
+    review_count: int
+    reviewer_count: int = 0      # จำนวนคนรีวิว (ไม่ซ้ำ) — ตัวเลขที่ใช้กับเกณฑ์ขั้นต่ำและป้ายหัวข้อ
+    min_reviews: int
+    label: Optional[str] = None
+    praise: list[str] = []
+    complaints: list[str] = []
+    praise_quotes: list[str] = []
+    complaint_quotes: list[str] = []
+    summary: Optional[str] = None
+    source: Optional[str] = None
+    generated_at: Optional[datetime] = None
+
+    @field_validator("generated_at")
+    @classmethod
+    def as_utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return v.replace(tzinfo=timezone.utc) if v is not None and v.tzinfo is None else v
 
 
 # =====================================================================

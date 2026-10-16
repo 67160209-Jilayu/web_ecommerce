@@ -10,14 +10,14 @@
     href="https://fonts.googleapis.com/css2?family=Taviraj:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="css/style.css?v=20261009g" />
+  <link rel="stylesheet" href="css/style.css?v=20261016b" />
 </head>
 <body>
   <a href="#main" class="skip-link">ข้ามไปเนื้อหาหลัก</a>
   <header class="topbar">
     <a href="index.html" class="logo">🛒 ShopMarket</a>
     <form class="search-bar" id="search-form">
-      <input type="search" id="search-input" aria-label="ค้นหาสินค้า" placeholder="ค้นหาสินค้า เช่น หม้อหุงข้าว, หูฟัง..." autocomplete="off" />
+      <input type="search" id="search-input" aria-label="ค้นหาสินค้า" placeholder="พิมพ์ชื่อสินค้า เช่น หูฟัง ร่ม หม้อหุงข้าว" autocomplete="off" />
       <button type="submit">ค้นหา</button>
     </form>
     <span id="auth-status" data-base=""></span>
@@ -63,13 +63,14 @@
     </details>
 
     <p class="page-title" id="page-title">สินค้าแนะนำสำหรับคุณ</p>
+    <p class="search-note" id="search-note" hidden>รวมสินค้าที่ใกล้เคียงกับที่ค้นหาไว้ด้วย</p>
     <div class="product-grid" id="product-grid">
       <p class="state-message">กำลังโหลดสินค้า...</p>
     </div>
   </main>
 
-  <script src="js/api.js?v=20261009g"></script>
-  <script src="js/chat.js?v=20261009g"></script>
+  <script src="js/api.js?v=20261016b"></script>
+  <script src="js/chat.js?v=20261016b"></script>
   <script>
     const grid = document.getElementById("product-grid");
     const pageTitle = document.getElementById("page-title");
@@ -123,8 +124,26 @@
     }
 
     function renderProducts(products) {
+      // backend บอกว่ามีสินค้าที่ "ใกล้เคียง" (ค้นจากความหมาย) ปนมาด้วย → แจ้งสั้นๆ ไม่ต้องอธิบายวิธี
+      const note = document.getElementById("search-note");
+      const hasSynonym = products.some((p) => p.match === "synonym");
+      const hasSemantic = products.some((p) => p.match === "semantic");
+      note.hidden = !(hasSynonym || hasSemantic);
+      note.textContent = hasSynonym && !hasSemantic
+        ? "รวมสินค้าที่เกี่ยวข้องกับสิ่งที่คุณค้นหาไว้ด้วย"
+        : "รวมสินค้าที่ใกล้เคียงกับที่ค้นหาไว้ด้วย";
+      // หน้าไม่พบสินค้ามีปุ่มแชทของตัวเองอยู่แล้ว → ซ่อนปุ่มลอยไม่ให้ทับกัน
+      document.body.classList.toggle("empty-results", products.length === 0);
       if (products.length === 0) {
-        grid.innerHTML = `<p class="state-message">ไม่พบสินค้าตามเงื่อนไขที่เลือก ลองปรับตัวกรองดูนะ</p>`;
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon" aria-hidden="true">🔍</div>
+            <p>ไม่พบสินค้าที่ตรงกับที่ค้นหา</p>
+            <p class="form-hint">ลองใช้คำอื่น เช่น "หูฟัง" "ร่ม" หรือ "หม้อ" หรือกด "ล้างตัวกรอง"</p>
+            ${window.ShopChat?.isReady()
+              ? `<button type="button" class="btn btn-primary" onclick="ShopChat.open()">💬 ให้ผู้ช่วยช่วยหา</button>`
+              : `<a href="index.html" class="btn btn-primary">ดูสินค้าทั้งหมด</a>`}
+          </div>`;
         return;
       }
       grid.innerHTML = products
@@ -139,7 +158,7 @@
             <div class="product-info">
               ${p.free_shipping ? `<span class="badge-free-shipping">ส่งฟรี</span>` : ""}
               ${specCompleteBadge(p)}
-              <div class="product-name">${escapeHtml(p.name)}</div>
+              <a class="product-name" href="pages/product-detail.html?id=${p.id}" onclick="event.stopPropagation()">${escapeHtml(p.name)}</a>
               <div class="product-price">
                 ${priceHtml(p)}
               </div>
@@ -197,6 +216,12 @@
       const filtering = ["min_price", "max_price", "sort"].some((k) => p.get(k));
       document.getElementById("filter-details").open = window.innerWidth > 700 || filtering;
     }
+    // ตัวอย่างคำค้นแบบ "ของขวัญให้แม่" ใช้ได้เฉพาะเมื่อระบบค้นจากความหมายเปิดอยู่ ไม่งั้นผู้ใช้จะเจอทางตัน
+    fetchFeatures().then((f) => {
+      document.getElementById("search-input").placeholder = f && f.semantic_search
+        ? "พิมพ์สิ่งที่อยากได้ เช่น หูฟัง หรือ ของขวัญให้แม่"
+        : "พิมพ์ชื่อสินค้า เช่น หูฟัง ร่ม หม้อหุงข้าว";
+    });
     loadProducts();
     ShopChat.init({ launcher: true });
   </script>

@@ -55,6 +55,10 @@ class LlmAdapter:
     ) -> LlmResult:
         raise NotImplementedError
 
+    def embed(self, texts: List[str]) -> List[List[float]]:
+        """เวกเตอร์ความหมายของข้อความ (ใช้ค้นหาตามความหมาย) — ผู้ให้บริการที่ไม่รองรับ raise LlmUnavailable"""
+        raise LlmUnavailable("ผู้ให้บริการนี้ไม่รองรับ embedding")
+
     def stream(
         self,
         system: str,
@@ -125,6 +129,15 @@ class GeminiProvider(LlmAdapter):
             tokens_out=usage.get("candidatesTokenCount", 0),
         )
 
+    def embed(self, texts):
+        model = config.LLM_EMBED_MODEL
+        url = f"{self.BASE}/{model}:batchEmbedContents"
+        body = {"requests": [{"model": f"models/{model}", "content": {"parts": [{"text": t[:2000]}]}}
+                             for t in texts]}
+        with self._request(url, json.dumps(body, ensure_ascii=False).encode("utf-8")) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return [e.get("values", []) for e in payload.get("embeddings", [])]
+
     def stream(self, system, messages, *, task, context=None, max_tokens=300):
         url = f"{self.BASE}/{self.model}:streamGenerateContent?alt=sse"
         with self._request(url, self._body(system, messages, False, max_tokens)) as resp:
@@ -155,8 +168,26 @@ def fake_handler(task: str):
     return deco
 
 
+def fake_vector(text: str, dim: int = 256) -> List[float]:
+    """เวกเตอร์กำหนดผลได้แน่นอนจาก char-trigram (ข้อความคล้าย → เวกเตอร์คล้าย) ไม่ใช้เน็ต"""
+    import hashlib
+    import math
+
+    t = re.sub(r"\s+", " ", (text or "").casefold()).strip()
+    vec = [0.0] * dim
+    grams = [t[i:i + 3] for i in range(max(1, len(t) - 2))]
+    for g in grams:
+        h = int(hashlib.md5(g.encode("utf-8")).hexdigest(), 16)
+        vec[h % dim] += 1.0 if (h >> 8) & 1 else -1.0
+    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+    return [v / norm for v in vec]
+
+
 class FakeProvider(LlmAdapter):
     name = "fake"
+
+    def embed(self, texts):
+        return [fake_vector(t) for t in texts]
 
     def generate(self, system, messages, *, task, context=None, json_mode=False, max_tokens=300):
         handler = FAKE_HANDLERS.get(task)
